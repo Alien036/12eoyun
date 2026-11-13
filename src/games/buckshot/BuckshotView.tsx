@@ -131,10 +131,27 @@ const ALL_ITEM_KEYS: BuckshotItemKey[] = [
   "expiredMed",
 ];
 
-function shuffleArrayFisherYates<T>(arr: T[]): T[] {
+// Gerçek Kriptografik Rastgelelik (window.crypto.getRandomValues)
+export function cryptoRandom(): number {
+  if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+    const buf = new Uint32Array(1);
+    window.crypto.getRandomValues(buf);
+    return buf[0] / 0x100000000;
+  }
+  return Math.random();
+}
+
+export function cryptoRandInt(minInclusive: number, maxInclusive: number): number {
+  return (
+    minInclusive +
+    Math.floor(cryptoRandom() * (maxInclusive - minInclusive + 1))
+  );
+}
+
+export function cryptoShuffle<T>(arr: T[]): T[] {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(cryptoRandom() * (i + 1));
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
@@ -276,6 +293,12 @@ export default function BuckshotView({
   } | null>(null);
 
   const savedToFirestoreRef = useRef<boolean>(false);
+  const loadTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const clearPendingLoadTimers = useCallback(() => {
+    loadTimersRef.current.forEach((t) => clearTimeout(t));
+    loadTimersRef.current = [];
+  }, []);
 
   const p2Name =
     mode === "duel" && player2 ? player2.name : "KRUPIYE (DEALER)";
@@ -364,21 +387,23 @@ export default function BuckshotView({
     chamber,
   ]);
 
-  // Yeni Şarjör + 3D Eşya Dağıtımı Başlat
+  // Yeni Şarjör + 3D Eşya Dağıtımı Başlat (%100 Kriptografik Rastgele)
   const startNewLoad = useCallback(
     (
       nextTurn: 1 | 2,
       roundNum: number,
       currentP1Items: (BuckshotItemKey | null)[],
       currentP2Items: (BuckshotItemKey | null)[],
-      isFirstLoadOfRound: boolean
+      sMode: "series3" | "fast1"
     ) => {
+      clearPendingLoadTimers();
       setIsAnimating(true);
       setGunAim("neutral");
       setGunPickedUpBy(null);
       setIsSawedOff(false);
       setSecretPeek(null);
       setAdrenalineStealSeat(null);
+      setChamber([]);
 
       aiMemoryRef.current = {
         knownCurrent: null,
@@ -386,29 +411,24 @@ export default function BuckshotView({
         invertedCurrent: false,
       };
 
-      // Toplam 2 ila 8 fişek üret
-      const totalShells = isFirstLoadOfRound
-        ? Math.min(6, 3 + roundNum)
-        : 2 + Math.floor(Math.random() * 7);
-      const liveCount = Math.max(
-        1,
-        Math.min(
-          totalShells - 1,
-          Math.round(totalShells * (0.42 + Math.random() * 0.22))
-        )
-      );
+      // 1) Toplam Fişek Sayısı: 1. Rauntta 3–6, 2./3. Raunt veya Tek Raunt modunda 4–8 arası %100 rastgele
+      const totalShells =
+        sMode === "series3" && roundNum === 1
+          ? cryptoRandInt(3, 6)
+          : cryptoRandInt(4, 8);
+
+      // 2) Kırmızı (DOLU) ve Mavi (BOŞ) Sayısı: En az 1 DOLU ve en az 1 BOŞ olmak üzere tamamen rastgele dağılım!
+      const liveCount = cryptoRandInt(1, totalShells - 1);
       const blankCount = totalShells - liveCount;
 
-      const orderedDisplay: ShellType[] = [
+      // Sadece mermi tepsisinde (revealPreview) yan yana sayım için gösterilecek dizi
+      const trayDisplayShells: ShellType[] = [
         ...Array(liveCount).fill("live"),
         ...Array(blankCount).fill("blank"),
       ];
 
-      // Her oyuncunun 8'li tebeşir yuvasındaki boş yerlere 2 ila 4 rastgele 3D eşya yerleştir
-      const itemCountToDeal =
-        roundNum === 1 && isFirstLoadOfRound
-          ? 2
-          : 2 + Math.floor(Math.random() * 3);
+      // 3) Eşya Dağıtımı: Her yüklemede 2 ila 4 adet rastgele seçilir; her oyuncunun her yuvası için bağımsız cryptoRandom ile çekilir
+      const itemCountToDeal = cryptoRandInt(2, 4);
 
       const dealInto8Slots = (
         existing: (BuckshotItemKey | null)[]
@@ -418,8 +438,8 @@ export default function BuckshotView({
         let added = 0;
         for (let i = 0; i < 8 && added < itemCountToDeal; i++) {
           if (next[i] === null) {
-            next[i] =
-              ALL_ITEM_KEYS[Math.floor(Math.random() * ALL_ITEM_KEYS.length)];
+            const randIdx = Math.floor(cryptoRandom() * ALL_ITEM_KEYS.length);
+            next[i] = ALL_ITEM_KEYS[randIdx];
             added++;
           }
         }
@@ -434,31 +454,33 @@ export default function BuckshotView({
       setRevealPreview({
         live: liveCount,
         blank: blankCount,
-        shells: orderedDisplay,
+        shells: trayDisplayShells,
       });
       setCrtBanner(
-        `YENİ ŞARJÖR: ${liveCount} KIRMIZI (DOLU) • ${blankCount} MAVİ (BOŞ)`
+        `YENİ ŞARJÖR (${totalShells} FİŞEK): ${liveCount} KIRMIZI (DOLU) • ${blankCount} MAVİ (BOŞ)`
       );
       setCrtSubText(
         `Kameralar 3D mermi tepsisine odaklandı. Masaya +${itemCountToDeal} yeni 3D eşya bırakıldı.`
       );
       sound.playCrtBeep(840);
 
-      // 3.2 Saniye 3D Mermi Tepsisi Yakın Çekimi -> Fisher-Yates Karıştırma -> Pompalıya Sürme
+      // 3.2 Saniye 3D Mermi Tepsisi Yakın Çekimi -> cryptoShuffle ile Tam Karıştırma -> Pompalıya Sürme
       const timer1 = setTimeout(() => {
         setRevealPreview(null);
-        const shuffled = shuffleArrayFisherYates(orderedDisplay);
-        setChamber(shuffled);
+        // Gösterim tepsisindeki sıralı diziyi KESİNLİKLE doğrudan kullanma; kriptografik Fisher-Yates ile karıştır!
+        const shuffledChamber = cryptoShuffle(cryptoShuffle([...trayDisplayShells]));
+        setChamber(shuffledChamber);
         setCrtBanner("FİŞEKLER KARIŞTIRILDI VE 3D POMPALIYA SÜRÜLÜYOR...");
 
-        const rackSteps = Math.min(4, shuffled.length);
+        const rackSteps = Math.min(4, shuffledChamber.length);
         for (let s = 0; s < rackSteps; s++) {
-          setTimeout(() => {
+          const rackTimer = setTimeout(() => {
             sound.playShotgunRack();
           }, s * 230);
+          loadTimersRef.current.push(rackTimer);
         }
 
-        setTimeout(() => {
+        const turnTimer = setTimeout(() => {
           setTurn(nextTurn);
           setIsAnimating(false);
           const activeName = nextTurn === 1 ? player1.name : p2Name;
@@ -467,16 +489,20 @@ export default function BuckshotView({
             "Masadaki 3D eşyalara dokunabilir veya 3D pompalı tüfeğe dokunup ateş edebilirsin!"
           );
         }, rackSteps * 230 + 260);
+        loadTimersRef.current.push(turnTimer);
       }, 3200);
-
-      return () => clearTimeout(timer1);
+      loadTimersRef.current.push(timer1);
     },
-    [player1.name, p2Name]
+    [clearPendingLoadTimers, player1.name, p2Name]
   );
 
-  // Raunt Başlatıcı
+  // Raunt Başlatıcı (2 Kişilik Düelloda ilk rauntta %50-%50 rastgele yazı-tura ile başlangıç sırası!)
   const initRound = useCallback(
-    (roundNum: number, sMode: "series3" | "fast1", startSeat: 1 | 2 = 1) => {
+    (roundNum: number, sMode: "series3" | "fast1", startSeat?: 1 | 2) => {
+      const resolvedStartSeat: 1 | 2 =
+        startSeat ??
+        (mode === "duel" ? (cryptoRandom() < 0.5 ? 1 : 2) : 1);
+
       const roundHp =
         sMode === "fast1" ? 5 : roundNum === 1 ? 2 : roundNum === 2 ? 4 : 5;
       const emptySlots = Array(8).fill(null);
@@ -494,19 +520,35 @@ export default function BuckshotView({
       setIsSawedOff(false);
       setGunAim("neutral");
       setGunPickedUpBy(null);
-      startNewLoad(startSeat, roundNum, emptySlots, emptySlots, true);
+      setTurn(resolvedStartSeat);
+      startNewLoad(resolvedStartSeat, roundNum, emptySlots, emptySlots, sMode);
     },
-    [startNewLoad]
+    [mode, startNewLoad]
   );
 
   // İlk açılış
   useEffect(() => {
     const cleanTimer = setTimeout(() => {
-      initRound(1, seriesMode, 1);
+      initRound(1, seriesMode);
     }, 80);
-    return () => clearTimeout(cleanTimer);
+    return () => {
+      clearTimeout(cleanTimer);
+      clearPendingLoadTimers();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Aynı oyuncularla anında yepyeni rastgele maç başlat
+  const handleInstantNewMatch = useCallback(() => {
+    sound.playClick();
+    savedToFirestoreRef.current = false;
+    setMatchOver(null);
+    setP1RoundsWon(0);
+    setP2RoundsWon(0);
+    setP1BraveStats({ selfBlankCount: 0, sawedHits: 0, itemsUsed: 0 });
+    setP2BraveStats({ selfBlankCount: 0, sawedHits: 0, itemsUsed: 0 });
+    initRound(1, seriesMode);
+  }, [initRound, seriesMode]);
 
   // Adrenalin 10 saniye geri sayımı
   useEffect(() => {
@@ -722,7 +764,7 @@ export default function BuckshotView({
             currentRound,
             latestP1Items,
             latestP2Items,
-            false
+            seriesMode
           );
         }, 800);
         return;
@@ -760,7 +802,7 @@ export default function BuckshotView({
       const nextName = desiredNextSeat === 1 ? player1.name : p2Name;
       setCrtBanner(`SIRA: ${nextName.toUpperCase()}`);
     },
-    [currentRound, player1.name, p2Name, startNewLoad]
+    [currentRound, seriesMode, player1.name, p2Name, startNewLoad]
   );
 
   // 3D POMPALI ATEŞLEME MEKANİĞİ (KENDİNE DOĞRULT veya RAKİBE DOĞRULT)
@@ -1067,7 +1109,7 @@ export default function BuckshotView({
                 currentRound,
                 newP1Tray,
                 newP2Tray,
-                false
+                seriesMode
               );
             }, 950);
           }
@@ -1130,8 +1172,7 @@ export default function BuckshotView({
               setIsHoldingPeek(mode === "solo");
             }
           } else {
-            const futureIdx =
-              1 + Math.floor(Math.random() * (chamber.length - 1));
+            const futureIdx = cryptoRandInt(1, chamber.length - 1);
             const futureShell = chamber[futureIdx];
             const ordinal = futureIdx + 1;
             const colorWord =
@@ -1182,7 +1223,7 @@ export default function BuckshotView({
             setCrtBanner("⚠️ KESİK KABLO: BOZUK İLAÇ ETKİSİZ KALDI!");
             break;
           }
-          const lucky = Math.random() < 0.5;
+          const lucky = cryptoRandom() < 0.5;
           if (lucky) {
             sound.playDefibShock(true);
             if (userSeat === 1) {
@@ -1224,6 +1265,7 @@ export default function BuckshotView({
       mode,
       startNewLoad,
       currentRound,
+      seriesMode,
       wiresCutSuddenDeath,
       maxHp,
       p1Hp,
@@ -1575,8 +1617,12 @@ export default function BuckshotView({
     handleFireShotgun,
   ]);
 
-  const liveRemaining = chamber.filter((c) => c === "live").length;
-  const blankRemaining = chamber.length - liveRemaining;
+  const liveRemaining = revealPreview
+    ? revealPreview.live
+    : chamber.filter((c) => c === "live").length;
+  const blankRemaining = revealPreview
+    ? revealPreview.blank
+    : chamber.length - liveRemaining;
 
   // Her bir yarı ekran (veya tek ekran) için HUD ve Kontrolleri çizen yardımcı fonksiyon
   // (Alt 2D Eşya Barı ve Orta Büyük HTML Butonlar kaldırıldı — %100 3D Masa & Karakter Etkileşimi!)
@@ -1798,10 +1844,18 @@ export default function BuckshotView({
 
           <button
             type="button"
-            onClick={onRequestNewGameWithGate}
+            onClick={handleInstantNewMatch}
             className="min-h-[42px] inline-flex items-center gap-1.5 rounded-xl border border-stone-700 bg-stone-900 px-2.5 py-1.5 text-xs font-extrabold text-amber-300 hover:border-amber-400 transition cursor-pointer"
           >
             <RotateCcw className="h-3.5 w-3.5" /> Yeni Maç
+          </button>
+
+          <button
+            type="button"
+            onClick={onRequestNewGameWithGate}
+            className="min-h-[42px] inline-flex items-center gap-1.5 rounded-xl border border-stone-700 bg-stone-900 px-2.5 py-1.5 text-xs font-bold text-stone-300 hover:border-amber-400 hover:text-white transition cursor-pointer"
+          >
+            👤 Oyuncu Seç
           </button>
         </div>
 
@@ -1819,14 +1873,13 @@ export default function BuckshotView({
         <div className="flex items-center gap-1 rounded-xl border border-stone-700 bg-stone-900 p-1">
           <button
             type="button"
-            disabled={isAnimating}
             onClick={() => {
               if (seriesMode === "series3") return;
               sound.playClick();
               setSeriesMode("series3");
               setP1RoundsWon(0);
               setP2RoundsWon(0);
-              initRound(1, "series3", 1);
+              initRound(1, "series3");
             }}
             className={`min-h-[34px] rounded-lg px-2 py-1 text-[10px] font-black transition cursor-pointer ${
               seriesMode === "series3"
@@ -1838,14 +1891,13 @@ export default function BuckshotView({
           </button>
           <button
             type="button"
-            disabled={isAnimating}
             onClick={() => {
               if (seriesMode === "fast1") return;
               sound.playClick();
               setSeriesMode("fast1");
               setP1RoundsWon(0);
               setP2RoundsWon(0);
-              initRound(1, "fast1", 1);
+              initRound(1, "fast1");
             }}
             className={`min-h-[34px] rounded-lg px-2 py-1 text-[10px] font-black transition cursor-pointer ${
               seriesMode === "fast1"
