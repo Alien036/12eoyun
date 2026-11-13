@@ -68,13 +68,13 @@ const ARCADE_GAMES: GameCardConfig[] = [
   // --- 3 YENİ YÜKSEK GERİLİMLİ PSİKOLOJİK DÜELLO OYUNU ---
   {
     key: "buckshot",
-    title: "Buckshot Roulette",
+    title: "3D Buckshot Roulette",
     icon: "🔫",
-    badge: "%100 Orijinal • 9 Eşya • CRT",
+    badge: "Three.js 3D • PS1 Dither • Split-Screen",
     category: "psychological",
-    playerCountTag: "Krupiye AI & 2 Kişilik Düello",
+    playerCountTag: "Krupiye AI & %50/%50 Çift Kamera",
     description:
-      "Paslı yeraltı masası, CRT defibrilatör, 3.5 sn mermi şovu, El Testeresi, Kelepçe, Adrenalin ve Avuç İçi Gizli Bakış!",
+      "Tam 3D yeraltı odası, karşıda sırıtan maske & eldivenli eller, 50/50 bölünmüş çift kamera (Dual-POV) ve masada 9 gerçek 3D eşya!",
     gradient: "from-red-600/35 via-amber-900/25 to-stone-950/95",
     borderGlow: "hover:border-red-400/75",
   },

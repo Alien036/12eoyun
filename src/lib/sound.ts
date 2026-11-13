@@ -1281,6 +1281,35 @@ class ArcadeSoundEngine {
       this.vibrate(12);
     }
   }
+
+  // Boş/Dolu Pompalı Kovanının Masaya Düşüp Sekme Sesi (Pirinç + Plastik Tıkırtısı)
+  public playShellCasingDrop(): void {
+    if (this.muted) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const bounces = [
+      { off: 0, freq: 2150, vol: 0.16 },
+      { off: 0.085, freq: 2480, vol: 0.11 },
+      { off: 0.145, freq: 2720, vol: 0.065 },
+    ];
+
+    bounces.forEach((b) => {
+      const t = now + b.off;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(b.freq, t);
+      osc.frequency.exponentialRampToValueAtTime(780, t + 0.032);
+      g.gain.setValueAtTime(b.vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.038);
+    });
+  }
 }
 
 export const sound = new ArcadeSoundEngine();

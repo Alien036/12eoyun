@@ -1173,3 +1173,4 @@ export default function WireRouletteView({
     </motion.div>
   );
 }
+
