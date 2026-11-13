@@ -343,6 +343,7 @@ export default function BuckshotView({
       gunAim,
       gunPickedUpBy,
       adrenalineStealSeat,
+      currentChamberShell: chamber[0] ?? null,
     });
   }, [
     mode,
@@ -360,6 +361,7 @@ export default function BuckshotView({
     gunAim,
     gunPickedUpBy,
     adrenalineStealSeat,
+    chamber,
   ]);
 
   // Yeni Şarjör + 3D Eşya Dağıtımı Başlat
@@ -1358,21 +1360,74 @@ export default function BuckshotView({
         return;
       }
 
-      if (hit.hitType === "shotgun") {
-        sound.playPickup();
-        setGunPickedUpBy((prev) => (prev === turn ? null : turn));
+      // 1) Tüfek eldeyken doğrudan karşıdaki rakibin 3D Maskesine/Gövdesine dokunulduğunda rakibe ateş et!
+      if (hit.hitType === "target_opponent" && gunPickedUpBy === turn) {
+        handleFireShotgun(turn === 1 ? 2 : 1);
         return;
       }
 
+      // 2) Tüfek eldeyken kendi alt-orta göğüs nişangahına dokunulduğunda kendine doğrultup ateş et!
+      if (hit.hitType === "target_self" && gunPickedUpBy === turn) {
+        handleFireShotgun(turn);
+        return;
+      }
+
+      // 3) Masadaki 3D Eşyalardan birine dokunulduğunda 3D el uzanıp eşyayı kullanır
       if (
         hit.hitType === "item" &&
         hit.trayOwner !== undefined &&
         hit.slotIndex !== undefined
       ) {
+        if (gunPickedUpBy !== null) {
+          setGunPickedUpBy(null);
+        }
         handleUseTrayItem(hit.trayOwner, hit.slotIndex);
+        return;
+      }
+
+      // 4) Masanın ortasındaki 3D Pompalı Tüfeğe dokunulduğunda tüfeği eline al veya masaya geri bırak
+      if (hit.hitType === "shotgun") {
+        sound.playPickup();
+        setGunPickedUpBy((prev) => {
+          const nextVal = prev === turn ? null : turn;
+          if (nextVal === turn) {
+            setCrtBanner(
+              "🎯 3D POMPALI TÜFEK ELDE — HEDEFİNİ 3D SAHNEDEN SEÇ!"
+            );
+            setCrtSubText(
+              "Ateş etmek için karşıdaki 3D Maskeye (Rakibe) veya alt-orta Kendi Göğüs Nişangahına dokun!"
+            );
+          } else {
+            setCrtBanner("POMPALI TÜFEK MASAYA BIRAKILDI");
+            setCrtSubText(
+              "Masadaki 3D eşyalara veya ortadaki 3D pompalı tüfeğe dokunarak hamle yap."
+            );
+          }
+          return nextVal;
+        });
+        return;
+      }
+
+      // 5) Tüfek eldeyken vazgeçip boş masaya dokunulduğunda tüfeği masaya geri bırak
+      if (hit.hitType === "table_cancel" && gunPickedUpBy === turn) {
+        sound.playClick();
+        setGunPickedUpBy(null);
+        setCrtBanner("POMPALI TÜFEK MASAYA BIRAKILDI");
+        setCrtSubText(
+          "Masadaki 3D eşyalara veya ortadaki 3D pompalı tüfeğe dokunarak hamle yap."
+        );
       }
     },
-    [isAnimating, matchOver, chamber.length, mode, turn, handleUseTrayItem]
+    [
+      isAnimating,
+      matchOver,
+      chamber.length,
+      mode,
+      turn,
+      gunPickedUpBy,
+      handleFireShotgun,
+      handleUseTrayItem,
+    ]
   );
 
   // AKILLI 3D KRUPIYE (DEALER) YAPAY ZEKA MOTORU
@@ -1524,18 +1579,17 @@ export default function BuckshotView({
   const blankRemaining = chamber.length - liveRemaining;
 
   // Her bir yarı ekran (veya tek ekran) için HUD ve Kontrolleri çizen yardımcı fonksiyon
+  // (Alt 2D Eşya Barı ve Orta Büyük HTML Butonlar kaldırıldı — %100 3D Masa & Karakter Etkileşimi!)
   const renderViewportHUD = (seat: 1 | 2) => {
     const isP1 = seat === 1;
     const myPlayerName = isP1 ? player1.name : p2Name;
     const myAvatar = isP1 ? player1.avatar : p2Avatar;
-    const oppName = isP1 ? p2Name : player1.name;
     const myHp = isP1 ? p1Hp : p2Hp;
     const myWins = isP1 ? p1RoundsWon : p2RoundsWon;
     const myCuffed = isP1 ? p1Cuffed : p2Cuffed;
-    const myItems = isP1 ? p1Items : p2Items;
-    const oppItems = isP1 ? p2Items : p1Items;
     const isMyTurn = turn === seat;
     const isStealingFromOpp = adrenalineStealSeat === seat;
+    const isHoldingGun = gunPickedUpBy === seat && isMyTurn;
 
     return (
       <div
@@ -1543,7 +1597,7 @@ export default function BuckshotView({
           mode === "duel"
             ? isMyTurn
               ? "ring-2 ring-inset ring-amber-400/75 shadow-[inset_0_0_45px_rgba(245,158,11,0.18)]"
-              : "opacity-80"
+              : "opacity-85"
             : ""
         }`}
       >
@@ -1560,163 +1614,111 @@ export default function BuckshotView({
           )}
         </AnimatePresence>
 
-        {/* ÜST HUD: Oyuncu Kimliği, 3D Şarj Barları ve Sıra Rozeti */}
-        <div className="relative z-20 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-stone-700/80 bg-black/75 px-3 py-2 backdrop-blur-sm pointer-events-auto">
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-500/40 bg-stone-900 text-lg">
-              {myAvatar}
-            </span>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs sm:text-sm font-black text-white">
-                  {myPlayerName}
-                </span>
-                <span className="rounded bg-stone-800 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">
-                  {mode === "duel"
-                    ? `${seat}. OYUNCU KAMERASI`
-                    : `RAUNT ${currentRound}`}
-                </span>
-                {myCuffed && (
-                  <span className="rounded bg-rose-600/40 border border-rose-400 px-1.5 py-0.5 text-[9px] font-black text-rose-200">
-                    🔗 KELEPÇELİ
+        {/* ÜST HUD: Oyuncu Kimliği, 3D Şarj Barları, Sıra Rozeti ve Diegetic 3D Durum Bandı */}
+        <div className="relative z-20 flex flex-col gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-stone-700/80 bg-black/75 px-3 py-1.5 backdrop-blur-sm pointer-events-auto">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-amber-500/40 bg-stone-900 text-base">
+                {myAvatar}
+              </span>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs sm:text-sm font-black text-white">
+                    {myPlayerName}
                   </span>
-                )}
-              </div>
-              <div className="mt-0.5 flex items-center gap-1">
-                {Array.from({ length: maxHp }).map((_, i) => (
-                  <span
-                    key={i}
-                    className={`px-1.5 py-0.2 rounded text-[10px] font-black border ${
-                      i < myHp
-                        ? wiresCutSuddenDeath
-                          ? "border-red-400 bg-red-500/40 text-red-200"
-                          : "border-emerald-400 bg-emerald-500/35 text-emerald-200"
-                        : "border-stone-800 bg-stone-950 text-stone-700"
-                    }`}
-                  >
-                    ⚡
+                  <span className="rounded bg-stone-800 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">
+                    {mode === "duel"
+                      ? `${seat}. OYUNCU KAMERASI`
+                      : `RAUNT ${currentRound}`}
                   </span>
-                ))}
-                {seriesMode === "series3" && (
-                  <span className="ml-1.5 text-[10px] font-black text-amber-300">
-                    Zafer: {myWins}/2
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-end">
-            <span
-              className={`rounded-full px-2.5 py-0.5 text-[10px] font-black border ${
-                isMyTurn
-                  ? "border-emerald-400 bg-emerald-500/25 text-emerald-200 animate-pulse"
-                  : "border-stone-700 bg-stone-900 text-stone-400"
-              }`}
-            >
-              {isMyTurn ? "🔥 SIRA SENDE" : "⏳ RAKİP OYNUYOR"}
-            </span>
-            <span className="mt-1 text-[10px] font-mono font-bold text-stone-300">
-              Namluda: <strong className="text-red-400">🔴{liveRemaining}</strong>{" "}
-              <strong className="text-sky-300">🔵{blankRemaining}</strong>
-            </span>
-          </div>
-        </div>
-
-        {/* ORTA BÖLGE: 3D Pompalı Hedef Seçimi ([KENDİNE DOĞRULT] / [RAKİBE DOĞRULT]) & Adrenalin Hırsızlık Paneli */}
-        <div className="relative z-20 flex flex-col items-center justify-center gap-2 my-auto">
-          {/* Sıra Bekleyen Oyuncu İçin Dokunma Kilidi Uyarısı (Sadece 2P Düelloda) */}
-          {mode === "duel" && !isMyTurn && !revealPreview && (
-            <div className="rounded-2xl border border-stone-700/80 bg-black/70 px-4 py-2 text-center backdrop-blur-sm">
-              <div className="flex items-center justify-center gap-1.5 text-xs font-black text-stone-300">
-                <Lock className="h-3.5 w-3.5 text-amber-400" />
-                <span>KARŞIDAKİ RAKİBİN HAMLESİNİ İZLE</span>
-              </div>
-              <p className="text-[10px] text-stone-400 mt-0.5">
-                Tüfek namlusunun kime doğrulduğuna dikkat et!
-              </p>
-            </div>
-          )}
-
-          {/* Adrenalin ile Karşı Masadan Eşya Çalma Seçici */}
-          {isMyTurn && isStealingFromOpp && !isAnimating && (
-            <div className="pointer-events-auto w-full max-w-md rounded-2xl border-2 border-rose-500 bg-black/90 p-3 text-center shadow-[0_0_30px_rgba(244,63,94,0.45)]">
-              <div className="text-xs font-black text-rose-300 animate-pulse">
-                💉 ADRENALİN ({adrenalineSecondsLeft}s): ÇALMAK İSTEDİĞİN RAKİP 3D EŞYAYI SEÇ!
-              </div>
-              <div className="mt-2 grid grid-cols-4 gap-1.5">
-                {oppItems.map((itKey, idx) => {
-                  if (!itKey || itKey === "adrenaline") return null;
-                  const meta = BUCKSHOT_ITEMS[itKey];
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleUseTrayItem(isP1 ? 2 : 1, idx)}
-                      className="min-h-[46px] flex flex-col items-center justify-center rounded-xl border border-rose-400/60 bg-rose-950/60 p-1 text-white hover:bg-rose-800 cursor-pointer"
-                    >
-                      <span className="text-base">{meta.icon}</span>
-                      <span className="text-[9px] font-black">
-                        {meta.shortName}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* 3D Pompalı Tüfek Doğrultma ve Ateşleme Butonları */}
-          {isMyTurn &&
-            !isAnimating &&
-            chamber.length > 0 &&
-            !(mode === "solo" && seat === 2) && (
-              <div className="pointer-events-auto flex flex-col items-center gap-2">
-                {isSawedOff && (
-                  <div className="rounded-full border border-red-400 bg-red-600/35 px-3 py-0.5 text-[10px] font-black text-red-100 shadow-lg">
-                    🪚 KESİK NAMLU AKTİF: BU ATIŞ 2x HASAR (2⚡) VURUR!
-                  </div>
-                )}
-
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <motion.button
-                    type="button"
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.94 }}
-                    onClick={() => handleFireShotgun(seat)}
-                    className="min-h-[50px] flex items-center gap-2 rounded-2xl border-2 border-sky-400/80 bg-sky-950/85 px-4 py-2 text-xs font-black text-sky-100 shadow-[0_0_24px_rgba(56,189,248,0.35)] hover:bg-sky-900 cursor-pointer"
-                  >
-                    <User className="h-4 w-4 text-sky-300" />
-                    <span>[KENDİNE DOĞRULT & SIK]</span>
-                  </motion.button>
-
-                  <motion.button
-                    type="button"
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.94 }}
-                    onClick={() => handleFireShotgun(isP1 ? 2 : 1)}
-                    className="min-h-[50px] flex items-center gap-2 rounded-2xl border-2 border-red-500/85 bg-red-950/90 px-4 py-2 text-xs font-black text-red-100 shadow-[0_0_26px_rgba(239,68,68,0.45)] hover:bg-red-900 cursor-pointer"
-                  >
-                    <Crosshair className="h-4 w-4 text-red-300" />
-                    <span>
-                      [{oppName.split(" ")[0].toUpperCase()} YÜZÜNE DOĞRULT & SIK]
+                  {myCuffed && (
+                    <span className="rounded bg-rose-600/40 border border-rose-400 px-1.5 py-0.5 text-[9px] font-black text-rose-200">
+                      🔗 KELEPÇELİ
                     </span>
-                  </motion.button>
+                  )}
+                  {isSawedOff && isMyTurn && (
+                    <span className="rounded bg-red-600/45 border border-red-400 px-1.5 py-0.5 text-[9px] font-black text-red-100">
+                      🪚 KESİK NAMLU (2x⚡)
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 flex items-center gap-1">
+                  {Array.from({ length: maxHp }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={`px-1.5 py-0.2 rounded text-[10px] font-black border ${
+                        i < myHp
+                          ? wiresCutSuddenDeath
+                            ? "border-red-400 bg-red-500/40 text-red-200"
+                            : "border-emerald-400 bg-emerald-500/35 text-emerald-200"
+                          : "border-stone-800 bg-stone-950 text-stone-700"
+                      }`}
+                    >
+                      ⚡
+                    </span>
+                  ))}
+                  {seriesMode === "series3" && (
+                    <span className="ml-1.5 text-[10px] font-black text-amber-300">
+                      Zafer: {myWins}/2
+                    </span>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
+
+            <div className="flex flex-col items-end">
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-black border ${
+                  isMyTurn
+                    ? "border-emerald-400 bg-emerald-500/25 text-emerald-200 animate-pulse"
+                    : "border-stone-700 bg-stone-900 text-stone-400"
+                }`}
+              >
+                {isMyTurn ? "🔥 SIRA SENDE" : "⏳ RAKİP OYNUYOR"}
+              </span>
+              <span className="mt-0.5 text-[10px] font-mono font-bold text-stone-300">
+                Namluda: <strong className="text-red-400">🔴{liveRemaining}</strong>{" "}
+                <strong className="text-sky-300">🔵{blankRemaining}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* 3D Etkileşim Durum Rozeti (Ekranı kapatmayan ince üst bildirim şeridi) */}
+          {isMyTurn && !isAnimating && !(mode === "solo" && seat === 2) && (
+            <div className="mx-auto flex items-center gap-2 rounded-full border border-amber-500/45 bg-black/75 px-3.5 py-1 text-[10px] font-black text-amber-200 shadow-lg backdrop-blur-sm">
+              {isStealingFromOpp ? (
+                <span className="text-rose-300 animate-pulse">
+                  💉 ADRENALİN ({adrenalineSecondsLeft}s): Masada rakibin önündeki kırmızı parlayan 3D eşyaya dokunarak çal!
+                </span>
+              ) : isHoldingGun ? (
+                <span className="text-cyan-200">
+                  🎯 TÜFEK ELDE: Ateş etmek için karşıdaki <strong className="text-red-400">3D Maskeye</strong> veya alttaki <strong className="text-sky-300">Kendi Göğüs Nişangahına</strong> dokun! (Bırakmak için masaya dokun)
+                </span>
+              ) : (
+                <span>
+                  🖐️ Masadaki parlayan <strong className="text-amber-300">3D Eşyalara</strong> veya ortadaki <strong className="text-red-300">3D Pompalı Tüfeğe</strong> doğrudan dokun!
+                </span>
+              )}
+            </div>
+          )}
+
+          {mode === "duel" && !isMyTurn && !revealPreview && (
+            <div className="mx-auto flex items-center gap-1.5 rounded-full border border-stone-700/80 bg-black/65 px-3 py-1 text-[10px] font-bold text-stone-300 backdrop-blur-sm">
+              <Lock className="h-3 w-3 text-amber-400" />
+              <span>Karşıdaki rakibin 3D hamlesini izle</span>
+            </div>
+          )}
         </div>
 
-        {/* ALT KÖŞE: SADECE AKTİF OYUNCUNUN KENDİ YARI EKRANINDA AÇILAN "AVUÇ İÇİ GİZLİ BAKIŞ" KUTUSU + 8'Lİ 3D EŞYA BARI */}
-        <div className="relative z-20 flex flex-col gap-2 pointer-events-auto">
-          {/* Avuç İçi Gizli Bakış Kutusu (Sadece bu yarı ekranın sahibine aitse görünür!) */}
+        {/* ALT BÖLGE: Yalnızca Büyüteç veya Gizli Telefon kullanıldığında açılan "Avuç İçi Gizli Bakış" kutusu */}
+        <div className="relative z-20 flex flex-col items-center pointer-events-auto">
           <AnimatePresence>
             {secretPeek && secretPeek.ownerSeat === seat && (
               <motion.div
                 initial={{ opacity: 0, y: 10, scale: 0.92 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.92 }}
-                className="mx-auto flex flex-col items-center rounded-2xl border-2 border-cyan-400/80 bg-slate-950/95 p-2 shadow-[0_0_30px_rgba(34,211,238,0.45)]"
+                className="mb-1 flex flex-col items-center rounded-2xl border-2 border-cyan-400/80 bg-slate-950/95 p-2 shadow-[0_0_30px_rgba(34,211,238,0.45)]"
               >
                 <div className="flex w-full items-center justify-between gap-3 text-[10px] font-black text-cyan-300 mb-1">
                   <span>{secretPeek.title}</span>
@@ -1743,7 +1745,7 @@ export default function BuckshotView({
                   onPointerCancel={() => {
                     if (mode === "duel") setIsHoldingPeek(false);
                   }}
-                  className="flex h-[84px] w-[195px] flex-col items-center justify-center rounded-xl border border-cyan-400/60 bg-[#04070b] px-2.5 text-center select-none cursor-pointer"
+                  className="flex h-[78px] w-[195px] flex-col items-center justify-center rounded-xl border border-cyan-400/60 bg-[#04070b] px-2.5 text-center select-none cursor-pointer"
                 >
                   {isHoldingPeek ? (
                     <div>
@@ -1776,66 +1778,6 @@ export default function BuckshotView({
               </motion.div>
             )}
           </AnimatePresence>
-
-          {/* Masadaki 8'li 3D Eşya Yuvalarıyla Senkronize Dokunmatik Bar */}
-          <div className="rounded-2xl border border-stone-700/85 bg-black/80 p-1.5 backdrop-blur-md">
-            <div className="mb-1 flex items-center justify-between px-1.5 text-[10px] font-bold text-stone-400">
-              <span className="flex items-center gap-1">
-                <Hand className="h-3 w-3 text-amber-400" />
-                Masadaki 3D Eşyaya veya Aşağıdaki Yuvaya Dokun:
-              </span>
-              <span className="text-amber-300 font-black">
-                {myItems.filter(Boolean).length}/8 Eşya
-              </span>
-            </div>
-
-            <div className="grid grid-cols-4 sm:grid-cols-8 gap-1">
-              {Array.from({ length: 8 }).map((_, slotIdx) => {
-                const itemKey = myItems[slotIdx];
-                const meta = itemKey ? BUCKSHOT_ITEMS[itemKey] : null;
-                const canUse =
-                  Boolean(meta) &&
-                  !isAnimating &&
-                  isMyTurn &&
-                  adrenalineStealSeat === null &&
-                  !(mode === "solo" && seat === 2);
-
-                return (
-                  <button
-                    key={slotIdx}
-                    type="button"
-                    disabled={!canUse}
-                    onClick={() => handleUseTrayItem(seat, slotIdx)}
-                    title={meta ? `${meta.name}: ${meta.desc}` : "Boş 3D Yuva"}
-                    className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl border p-1 text-center transition ${
-                      meta
-                        ? `${meta.accentClass} ${
-                            canUse
-                              ? "cursor-pointer hover:brightness-125 ring-1 ring-white/20"
-                              : "opacity-65 cursor-default"
-                          }`
-                        : "border-stone-800/80 bg-stone-950/60 text-stone-700 cursor-default"
-                    }`}
-                  >
-                    {meta ? (
-                      <>
-                        <span className="text-base leading-none">
-                          {meta.icon}
-                        </span>
-                        <span className="mt-0.5 text-[8px] font-black leading-tight truncate max-w-full">
-                          {meta.shortName}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-[9px] font-mono opacity-40">
-                        #{slotIdx + 1}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </div>
       </div>
     );
