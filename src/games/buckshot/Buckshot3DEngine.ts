@@ -701,7 +701,8 @@ function createAvatarRig(isP1AtPlusZ: boolean, layerIndex: 1 | 2): AvatarRig {
 
 export class Buckshot3DEngine {
   private canvas: HTMLCanvasElement;
-  private renderer: THREE.WebGLRenderer;
+  private renderer: THREE.WebGLRenderer | null = null;
+  public initError: string | null = null;
   private scene: THREE.Scene;
   private camP1: THREE.PerspectiveCamera;
   private camP2: THREE.PerspectiveCamera;
@@ -770,19 +771,14 @@ export class Buckshot3DEngine {
   private lastItemsHashP2: string = "";
   private lastRevealHash: string = "";
 
-  constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas;
+  constructor(container: HTMLElement) {
+    this.canvas = document.createElement("canvas");
+    this.canvas.className = "w-full h-full block";
+    this.canvas.style.imageRendering = "pixelated";
+    container.appendChild(this.canvas);
+
     this.clock = new THREE.Clock();
     this.raycaster = new THREE.Raycaster();
-
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: false, // Retro PS1 piksel keskinliği için antialias kapalı!
-      powerPreference: "high-performance",
-    });
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.BasicShadowMap;
-    this.renderer.setClearColor(0x070504, 1);
 
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.FogExp2(0x0b0706, 0.085);
@@ -847,6 +843,38 @@ export class Buckshot3DEngine {
     this.avatarP1 = createAvatarRig(true, 2); // +Z'de, Layer 2 (camP2 görür)
     this.scene.add(this.avatarP2.root);
     this.scene.add(this.avatarP1.root);
+
+    // Güvenli WebGL Başlatma (StrictMode ve ContextLost Korumalı)
+    try {
+      const gl = (this.canvas.getContext("webgl2", { antialias: false }) ||
+        this.canvas.getContext("webgl", { antialias: false })) as
+        | WebGLRenderingContext
+        | WebGL2RenderingContext
+        | null;
+
+      if (!gl || gl.isContextLost()) {
+        throw new Error(
+          "WebGL grafik bağlamı (context) oluşturulamadı veya kayboldu."
+        );
+      }
+
+      this.renderer = new THREE.WebGLRenderer({
+        canvas: this.canvas,
+        context: gl as WebGLRenderingContext,
+        antialias: false, // Retro PS1 piksel keskinliği için antialias kapalı!
+        powerPreference: "default",
+      });
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.BasicShadowMap;
+      this.renderer.setClearColor(0x070504, 1);
+    } catch (err) {
+      this.initError =
+        err instanceof Error
+          ? err.message
+          : "WebGL 3D motoru başlatılırken beklenmeyen bir hata oluştu.";
+      this.disposed = true;
+      return;
+    }
 
     this.resize();
     this.animate();
@@ -1556,7 +1584,7 @@ export class Buckshot3DEngine {
   }
 
   public resize(): void {
-    if (this.disposed) return;
+    if (this.disposed || !this.renderer) return;
     const parent = this.canvas.parentElement;
     const w = parent ? parent.clientWidth : window.innerWidth;
     const h = parent ? parent.clientHeight : window.innerHeight;
@@ -1749,6 +1777,7 @@ export class Buckshot3DEngine {
   }
 
   private renderDualViewports(): void {
+    if (!this.renderer) return;
     const w = this.canvas.width;
     const h = this.canvas.height;
     if (w <= 0 || h <= 0) return;
@@ -1780,7 +1809,7 @@ export class Buckshot3DEngine {
     }
   }
 
-  // Tam WebGL Bellek Temizliği (WebGL Context Lost Koruması)
+  // Tam WebGL Bellek Temizliği (forceContextLoss kullanmadan dinamik canvas silinir)
   public dispose(): void {
     this.disposed = true;
     if (this.animFrameId !== null) {
@@ -1805,11 +1834,9 @@ export class Buckshot3DEngine {
       }
     });
 
-    this.renderer.dispose();
-    try {
-      this.renderer.forceContextLoss();
-    } catch {
-      // ignore
-    }
+    this.renderer?.dispose();
+    this.renderer = null;
+    this.canvas.remove();
   }
 }
+

@@ -168,8 +168,10 @@ export default function BuckshotView({
   onRequestNewGameWithGate,
   onComboEnergyChange,
 }: BuckshotViewProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<Buckshot3DEngine | null>(null);
+  const [webglError, setWebglError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState<number>(0);
 
   const [seriesMode, setSeriesMode] = useState<"series3" | "fast1">(
     initialSubMode === "fast1" ? "fast1" : "series3"
@@ -281,30 +283,47 @@ export default function BuckshotView({
 
   // 1) THREE.JS MOTORUNU BAŞLAT VE WEBGL BELLEK TEMİZLİĞİNİ GARANTİ ALTINA AL
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!container) return;
 
-    const engine = new Buckshot3DEngine(canvas);
-    engineRef.current = engine;
+    setWebglError(null);
+    let engine: Buckshot3DEngine | null = null;
+
+    try {
+      engine = new Buckshot3DEngine(container);
+      if (engine.initError) {
+        setWebglError(engine.initError);
+        engine.dispose();
+        return;
+      }
+      engineRef.current = engine;
+    } catch (err) {
+      setWebglError(
+        err instanceof Error
+          ? err.message
+          : "WebGL 3D sahnesi başlatılamadı."
+      );
+      return;
+    }
 
     const handleResize = () => {
-      engine.resize();
+      engine?.resize();
     };
     window.addEventListener("resize", handleResize);
 
     let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined" && canvas.parentElement) {
-      observer = new ResizeObserver(() => engine.resize());
-      observer.observe(canvas.parentElement);
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => engine?.resize());
+      observer.observe(container);
     }
 
     return () => {
       window.removeEventListener("resize", handleResize);
       observer?.disconnect();
-      engine.dispose();
+      engine?.dispose();
       engineRef.current = null;
     };
-  }, []);
+  }, [retryKey]);
 
   // 2) REACT STATE DEĞİŞTİKÇE 3D SAHNE İLE SENKRONİZE ET
   useEffect(() => {
@@ -1326,7 +1345,7 @@ export default function BuckshotView({
 
   // 3D KANVAS ÜZERİNDE BÖLÜNMÜŞ EKRAN (DUAL-VIEWPORT) RAYCAST DOKUNMA ALGILAMA
   const handleCanvasPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLCanvasElement>) => {
+    (e: React.PointerEvent<HTMLDivElement>) => {
       if (isAnimating || matchOver || chamber.length === 0) return;
       if (mode === "solo" && turn === 2) return;
 
@@ -1899,13 +1918,43 @@ export default function BuckshotView({
 
       {/* ANA 3D SAHNE & BÖLÜNMÜŞ ÇİFT EKRAN (DUAL-POV SPLIT-SCREEN) */}
       <div className="relative flex-1 w-full min-h-0 overflow-hidden">
-        {/* Three.js WebGL Kanvası (Tek Sahne, Çift Kamera setViewport/setScissor) */}
-        <canvas
-          ref={canvasRef}
+        {/* Three.js Dinamik Kanvas Konteyneri (StrictMode ve ContextLost Korumalı) */}
+        <div
+          ref={containerRef}
           onPointerDown={handleCanvasPointerDown}
-          className="absolute inset-0 h-full w-full block cursor-crosshair"
-          style={{ imageRendering: "pixelated" }}
+          className="w-full h-full relative cursor-crosshair"
         />
+
+        {/* WebGL Başlatma Hatası / Yeniden Dene Ekranı */}
+        {webglError && (
+          <div className="  absolute inset-0 z-50 flex flex-col items-center justify-center bg-stone-950/95 p-6 text-center backdrop-blur-md">
+            <div className="max-w-md rounded-3xl border-2 border-amber-500/60 bg-stone-900/95 p-6 shadow-[0_0_50px_rgba(245,158,11,0.3)]">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-400/40 bg-amber-500/20 text-3xl">
+                ⚠️
+              </div>
+              <h3 className="text-lg font-black text-amber-300">
+                3D WebGL Sahnesi Yenileniyor
+              </h3>
+              <p className="mt-1.5 text-xs text-stone-300">{webglError}</p>
+              <div className="mt-5 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRetryKey((k) => k + 1)}
+                  className="min-h-[52px] rounded-2xl bg-gradient-to-r from-amber-500 to-red-600 px-5 py-2.5 text-xs font-black text-white shadow-lg hover:brightness-110 transition cursor-pointer"
+                >
+                  🔄 3D Sahneyi Yeniden Başlat
+                </button>
+                <button
+                  type="button"
+                  onClick={onBackToHub}
+                  className="min-h-[52px] rounded-2xl border border-stone-700 bg-stone-800 px-4 py-2.5 text-xs font-bold text-stone-300 hover:text-white transition cursor-pointer"
+                >
+                  Lobiye Dön
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Retro PS1 Dither & CRT Scanline + Karanlık Köşe Karartması (Vignette) Katmanı */}
         <div
@@ -1923,11 +1972,11 @@ export default function BuckshotView({
 
         {/* HUD Katmanı: Solo Modda Tam Ekran, 2P Düelloda %50 Sol (Oyuncu 1) + %50 Sağ (Oyuncu 2) */}
         {mode === "solo" ? (
-          <div className="relative z-20 h-full w-full">
+          <div className="pointer-events-none absolute inset-0 z-20 h-full w-full">
             {renderViewportHUD(1)}
           </div>
         ) : (
-          <div className="relative z-20 grid h-full w-full grid-cols-2">
+          <div className="pointer-events-none absolute inset-0 z-20 grid h-full w-full grid-cols-2">
             {/* SOL YARI EKRAN (%50): 1. OYUNCU GÖZÜ (+Z Kamerası) */}
             <div className="h-full w-full overflow-hidden">
               {renderViewportHUD(1)}
