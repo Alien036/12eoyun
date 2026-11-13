@@ -7,6 +7,7 @@ import {
   FRAME_THEMES,
   formatRelativeTime,
   getOverallRankTitle,
+  isSmartboardMultiplayerGame,
   type ActivityFeedEvent,
   type LeaderboardTabKey,
   type PlayerDoc,
@@ -28,12 +29,17 @@ const SPRING_TAB = {
 };
 
 const TABS: { key: LeaderboardTabKey; label: string; icon: string }[] = [
-  { key: "overall", label: "Genel Sıralama", icon: "🏆" },
+  { key: "overall", label: "Genel Toplam", icon: "🏆" },
   { key: "blockBlast", label: "Block Blast", icon: "🧱" },
   { key: "chess", label: "Satranç", icon: "♟️" },
   { key: "billiards", label: "Bilardo", icon: "🎱" },
   { key: "solitaire", label: "Solitaire", icon: "🃏" },
   { key: "sudoku", label: "Sudoku", icon: "🔢" },
+  { key: "chainReaction", label: "Zincirleme Patlama", icon: "⚛️" },
+  { key: "ludo", label: "Kızma Birader", icon: "🎲" },
+  { key: "dotsSos", label: "Kare & SOS", icon: "✨" },
+  { key: "tanks", label: "Topçu Tanklar", icon: "💥" },
+  { key: "memoryMatch", label: "Hafıza Arenası", icon: "🧠" },
 ];
 
 export default function LeaderboardHub({
@@ -46,33 +52,45 @@ export default function LeaderboardHub({
   const [activeTab, setActiveTab] = useState<LeaderboardTabKey>(initialTab);
 
   const getScoreForTab = (p: PlayerDoc, tab: LeaderboardTabKey): number => {
-    if (tab === "overall") return p.overallBestScore;
-    return p.games[tab].highScore;
+    if (tab === "overall") return p.overallBestScore ?? 0;
+    return p.games?.[tab]?.highScore ?? 0;
   };
 
   const getSubInfoForTab = (p: PlayerDoc, tab: LeaderboardTabKey): string => {
     if (tab === "overall") {
-      return getOverallRankTitle(p.overallBestScore).title;
+      return getOverallRankTitle(p.overallBestScore ?? 0).title;
     }
     if (tab === "blockBlast") {
-      return `${p.games.blockBlast.gamesPlayed} oyun • Combo x${Math.max(
+      const st = p.games?.blockBlast;
+      return `${st?.gamesPlayed ?? 0} oyun • Combo x${Math.max(
         1,
-        p.games.blockBlast.maxCombo
+        st?.maxCombo ?? 1
       )}`;
     }
     if (tab === "chess") {
-      return `${p.games.chess.wins} Galibiyet • ${p.games.chess.gamesPlayed} maç`;
+      const st = p.games?.chess;
+      return `${st?.wins ?? 0} Galibiyet • ${st?.gamesPlayed ?? 0} maç`;
     }
     if (tab === "billiards") {
-      return `${p.games.billiards.wins} Galibiyet • Seri x${Math.max(
+      const st = p.games?.billiards;
+      return `${st?.wins ?? 0} Galibiyet • Seri x${Math.max(
         1,
-        p.games.billiards.bestStreak
+        st?.bestStreak ?? 1
       )}`;
     }
     if (tab === "solitaire") {
-      return `${p.games.solitaire.wins} Zafer • ${p.games.solitaire.gamesPlayed} oyun`;
+      const st = p.games?.solitaire;
+      return `${st?.wins ?? 0} Zafer • ${st?.gamesPlayed ?? 0} oyun`;
     }
-    return `${p.games.sudoku.wins} Çözüm • ${p.games.sudoku.gamesPlayed} oyun`;
+    if (tab === "sudoku") {
+      const st = p.games?.sudoku;
+      return `${st?.wins ?? 0} Çözüm • ${st?.gamesPlayed ?? 0} oyun`;
+    }
+    if (isSmartboardMultiplayerGame(tab)) {
+      const st = p.games?.[tab];
+      return `${st?.wins ?? 0} Şampiyonluk • ${st?.gamesPlayed ?? 0} maç`;
+    }
+    return "";
   };
 
   const sortedPlayers = useMemo(() => {
@@ -93,7 +111,7 @@ export default function LeaderboardHub({
   const rest = sortedPlayers.slice(3);
 
   return (
-    <div className="flex w-full max-w-4xl flex-col gap-3">
+    <div className="flex w-full max-w-5xl flex-col gap-3">
       {/* 1. Canlı "Son Rekorlar & Düellolar" Kayan Bant (activityFeed) */}
       <div className="overflow-hidden rounded-2xl border border-amber-400/25 bg-slate-900/85 backdrop-blur-md">
         <div className="flex items-center gap-2.5 px-3.5 py-2">
@@ -125,7 +143,8 @@ export default function LeaderboardHub({
               </motion.div>
             ) : (
               <span className="text-xs text-slate-400">
-                Yeni rekorlar ve düello sonuçları canlı olarak burada kayacak!
+                Yeni rekorlar ve akıllı tahta düello sonuçları canlı olarak
+                burada kayacak!
               </span>
             )}
           </div>
@@ -150,8 +169,8 @@ export default function LeaderboardHub({
         </div>
       </div>
 
-      {/* 2. 6 Sekmeli Oyun Sıralama Seçicisi (layoutId Liquid Morph) */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+      {/* 2. 🏆 Genel Toplam + 10 Ayrı Oyun Sekmeli Sıralama Seçicisi (Yatay Kaydırılabilir Hap Butonlar) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar">
         {TABS.map((t) => {
           const active = activeTab === t.key;
           return (
@@ -165,7 +184,7 @@ export default function LeaderboardHub({
                 sound.playClick();
                 setActiveTab(t.key);
               }}
-              className={`relative shrink-0 inline-flex items-center gap-1.5 rounded-2xl border px-3.5 py-2 text-xs font-extrabold transition-colors cursor-pointer ${
+              className={`relative shrink-0 min-h-[46px] inline-flex items-center gap-1.5 rounded-2xl border px-3.5 py-2 text-xs font-extrabold transition-colors cursor-pointer ${
                 active
                   ? "border-indigo-300/60 text-white"
                   : "border-white/10 bg-slate-900/75 text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -365,7 +384,7 @@ export default function LeaderboardHub({
                           {tabScore.toLocaleString("tr-TR")} P
                         </div>
                         <div className="text-[10px] font-semibold text-cyan-300">
-                          Profili İncele
+                          10 Oyun Profilini İncele
                         </div>
                       </div>
                     </motion.button>

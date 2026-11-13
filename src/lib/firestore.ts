@@ -15,7 +15,46 @@ export type GameKey =
   | "chess"
   | "billiards"
   | "solitaire"
-  | "sudoku";
+  | "sudoku"
+  | "chainReaction"
+  | "ludo"
+  | "dotsSos"
+  | "tanks"
+  | "memoryMatch";
+
+export type MultiplayerGameKey =
+  | "chainReaction"
+  | "ludo"
+  | "dotsSos"
+  | "tanks"
+  | "memoryMatch";
+
+export const ALL_GAME_KEYS: GameKey[] = [
+  "blockBlast",
+  "chess",
+  "billiards",
+  "solitaire",
+  "sudoku",
+  "chainReaction",
+  "ludo",
+  "dotsSos",
+  "tanks",
+  "memoryMatch",
+];
+
+export const MULTIPLAYER_GAME_KEYS: MultiplayerGameKey[] = [
+  "chainReaction",
+  "ludo",
+  "dotsSos",
+  "tanks",
+  "memoryMatch",
+];
+
+export function isSmartboardMultiplayerGame(
+  key: GameKey
+): key is MultiplayerGameKey {
+  return (MULTIPLAYER_GAME_KEYS as string[]).includes(key);
+}
 
 export type LeaderboardTabKey = "overall" | GameKey;
 
@@ -134,7 +173,110 @@ export const GAME_LABELS: Record<
     icon: "🔢",
     accent: "text-indigo-300",
   },
+  chainReaction: {
+    title: "Zincirleme Patlama",
+    icon: "⚛️",
+    accent: "text-sky-300",
+  },
+  ludo: {
+    title: "Kızma Birader",
+    icon: "🎲",
+    accent: "text-amber-300",
+  },
+  dotsSos: {
+    title: "Kare & SOS Arenası",
+    icon: "✨",
+    accent: "text-fuchsia-300",
+  },
+  tanks: {
+    title: "Topçu Tanklar",
+    icon: "💥",
+    accent: "text-rose-300",
+  },
+  memoryMatch: {
+    title: "Hafıza Arenası",
+    icon: "🧠",
+    accent: "text-emerald-300",
+  },
 };
+
+export interface SmartboardSlotTheme {
+  slotIndex: number; // 0..3
+  label: string;
+  colorName: string;
+  hex: string;
+  lightHex: string;
+  darkHex: string;
+  borderClass: string;
+  frameGlowClass: string;
+  badgeClass: string;
+  textClass: string;
+  bgSoftClass: string;
+  buttonGradient: string;
+}
+
+export const SMARTBOARD_SLOTS: SmartboardSlotTheme[] = [
+  {
+    slotIndex: 0,
+    label: "1. Oyuncu",
+    colorName: "Mavi",
+    hex: "#38bdf8",
+    lightHex: "#bae6fd",
+    darkHex: "#0369a1",
+    borderClass: "border-sky-400",
+    frameGlowClass:
+      "border-sky-400/80 shadow-[0_0_40px_rgba(56,189,248,0.45),inset_0_0_28px_rgba(56,189,248,0.18)]",
+    badgeClass: "bg-sky-500/25 border-sky-400/60 text-sky-200",
+    textClass: "text-sky-300",
+    bgSoftClass: "bg-sky-500/15",
+    buttonGradient: "from-sky-500 to-blue-600",
+  },
+  {
+    slotIndex: 1,
+    label: "2. Oyuncu",
+    colorName: "Kırmızı",
+    hex: "#f43f5e",
+    lightHex: "#fecdd3",
+    darkHex: "#be123c",
+    borderClass: "border-rose-500",
+    frameGlowClass:
+      "border-rose-500/80 shadow-[0_0_40px_rgba(244,63,94,0.45),inset_0_0_28px_rgba(244,63,94,0.18)]",
+    badgeClass: "bg-rose-500/25 border-rose-400/60 text-rose-200",
+    textClass: "text-rose-300",
+    bgSoftClass: "bg-rose-500/15",
+    buttonGradient: "from-rose-500 to-red-600",
+  },
+  {
+    slotIndex: 2,
+    label: "3. Oyuncu",
+    colorName: "Yeşil",
+    hex: "#10b981",
+    lightHex: "#a7f3d0",
+    darkHex: "#047857",
+    borderClass: "border-emerald-400",
+    frameGlowClass:
+      "border-emerald-400/80 shadow-[0_0_40px_rgba(16,185,129,0.45),inset_0_0_28px_rgba(16,185,129,0.18)]",
+    badgeClass: "bg-emerald-500/25 border-emerald-400/60 text-emerald-200",
+    textClass: "text-emerald-300",
+    bgSoftClass: "bg-emerald-500/15",
+    buttonGradient: "from-emerald-500 to-teal-600",
+  },
+  {
+    slotIndex: 3,
+    label: "4. Oyuncu",
+    colorName: "Altın Sarısı",
+    hex: "#f59e0b",
+    lightHex: "#fde68a",
+    darkHex: "#b45309",
+    borderClass: "border-amber-400",
+    frameGlowClass:
+      "border-amber-400/80 shadow-[0_0_40px_rgba(245,158,11,0.48),inset_0_0_28px_rgba(245,158,11,0.18)]",
+    badgeClass: "bg-amber-500/25 border-amber-400/60 text-amber-200",
+    textClass: "text-amber-300",
+    bgSoftClass: "bg-amber-500/15",
+    buttonGradient: "from-amber-400 to-orange-500",
+  },
+];
 
 export interface BlockBlastStats {
   highScore: number;
@@ -170,12 +312,23 @@ export interface SudokuStats {
   bestTimeSec: number | null;
 }
 
+export interface MultiplayerArenaStats {
+  highScore: number;
+  gamesPlayed: number;
+  wins: number;
+}
+
 export interface PlayerGamesMap {
   blockBlast: BlockBlastStats;
   chess: ChessStats;
   billiards: BilliardsStats;
   solitaire: SolitaireStats;
   sudoku: SudokuStats;
+  chainReaction: MultiplayerArenaStats;
+  ludo: MultiplayerArenaStats;
+  dotsSos: MultiplayerArenaStats;
+  tanks: MultiplayerArenaStats;
+  memoryMatch: MultiplayerArenaStats;
 }
 
 export interface PlayerDoc {
@@ -189,6 +342,13 @@ export interface PlayerDoc {
   updatedAt: number;
   overallBestScore: number;
   games: PlayerGamesMap;
+  isBot?: boolean;
+}
+
+export interface MultiplayerSeat {
+  slotIndex: number; // 0..3
+  player: PlayerDoc;
+  isBot: boolean;
 }
 
 export interface ActivityFeedEvent {
@@ -212,16 +372,63 @@ export function createEmptyGamesMap(): PlayerGamesMap {
     billiards: { highScore: 0, gamesPlayed: 0, wins: 0, bestStreak: 0 },
     solitaire: { highScore: 0, gamesPlayed: 0, wins: 0, bestTimeSec: null },
     sudoku: { highScore: 0, gamesPlayed: 0, wins: 0, bestTimeSec: null },
+    chainReaction: { highScore: 0, gamesPlayed: 0, wins: 0 },
+    ludo: { highScore: 0, gamesPlayed: 0, wins: 0 },
+    dotsSos: { highScore: 0, gamesPlayed: 0, wins: 0 },
+    tanks: { highScore: 0, gamesPlayed: 0, wins: 0 },
+    memoryMatch: { highScore: 0, gamesPlayed: 0, wins: 0 },
   };
 }
 
-export function calculateOverallScore(games: PlayerGamesMap): number {
+export function cloneGamesMap(games?: Partial<PlayerGamesMap>): PlayerGamesMap {
+  const empty = createEmptyGamesMap();
+  if (!games) return empty;
+  return {
+    blockBlast: { ...empty.blockBlast, ...games.blockBlast },
+    chess: { ...empty.chess, ...games.chess },
+    billiards: { ...empty.billiards, ...games.billiards },
+    solitaire: { ...empty.solitaire, ...games.solitaire },
+    sudoku: { ...empty.sudoku, ...games.sudoku },
+    chainReaction: { ...empty.chainReaction, ...games.chainReaction },
+    ludo: { ...empty.ludo, ...games.ludo },
+    dotsSos: { ...empty.dotsSos, ...games.dotsSos },
+    tanks: { ...empty.tanks, ...games.tanks },
+    memoryMatch: { ...empty.memoryMatch, ...games.memoryMatch },
+  };
+}
+
+export function createBotPlayerDoc(slotIndex: number): PlayerDoc {
+  const botNames = ["Siber Bot α", "Robo-Tank β", "Neon Zeka γ", "Kuantum Bot δ"];
+  const botAvatars = ["🤖", "👾", "🛸", "⚡"];
+  const frames: FrameColorKey[] = ["cyan", "crimson", "emerald", "gold"];
+  const now = Date.now();
+  return {
+    id: `__bot_seat_${slotIndex}__`,
+    name: botNames[slotIndex % botNames.length],
+    avatar: botAvatars[slotIndex % botAvatars.length],
+    frameColor: frames[slotIndex % frames.length],
+    statusText: "Akıllı Tahta Yapay Zeka Rakibi",
+    pinHash: "",
+    createdAt: now,
+    updatedAt: now,
+    overallBestScore: 0,
+    games: createEmptyGamesMap(),
+    isBot: true,
+  };
+}
+
+export function calculateOverallScore(games: Partial<PlayerGamesMap>): number {
   return (
-    (Number(games.blockBlast?.highScore) || 0) +
-    (Number(games.chess?.highScore) || 0) +
-    (Number(games.billiards?.highScore) || 0) +
-    (Number(games.solitaire?.highScore) || 0) +
-    (Number(games.sudoku?.highScore) || 0)
+    (Number(games?.blockBlast?.highScore) || 0) +
+    (Number(games?.chess?.highScore) || 0) +
+    (Number(games?.billiards?.highScore) || 0) +
+    (Number(games?.solitaire?.highScore) || 0) +
+    (Number(games?.sudoku?.highScore) || 0) +
+    (Number(games?.chainReaction?.highScore) || 0) +
+    (Number(games?.ludo?.highScore) || 0) +
+    (Number(games?.dotsSos?.highScore) || 0) +
+    (Number(games?.tanks?.highScore) || 0) +
+    (Number(games?.memoryMatch?.highScore) || 0)
   );
 }
 
@@ -230,7 +437,7 @@ export function normalizePlayerDoc(
   raw: Record<string, unknown>
 ): PlayerDoc {
   const rawGames = (raw.games as Partial<PlayerGamesMap> | undefined) ?? {};
-  // Eski tek oyunlu kayıtlarla tam geriye dönük uyumluluk
+  // Eski tek oyunlu ve 5 oyunlu kayıtlarla tam geriye dönük uyumluluk (Safe Migration)
   const legacyHighScore = Number(raw.highScore) || 0;
   const legacyTotalGames = Number(raw.totalGames) || 0;
   const legacyMaxCombo = Number(raw.maxCombo) || 0;
@@ -272,6 +479,31 @@ export function normalizePlayerDoc(
         typeof rawGames.sudoku?.bestTimeSec === "number"
           ? rawGames.sudoku.bestTimeSec
           : null,
+    },
+    chainReaction: {
+      highScore: Number(rawGames.chainReaction?.highScore) || 0,
+      gamesPlayed: Number(rawGames.chainReaction?.gamesPlayed) || 0,
+      wins: Number(rawGames.chainReaction?.wins) || 0,
+    },
+    ludo: {
+      highScore: Number(rawGames.ludo?.highScore) || 0,
+      gamesPlayed: Number(rawGames.ludo?.gamesPlayed) || 0,
+      wins: Number(rawGames.ludo?.wins) || 0,
+    },
+    dotsSos: {
+      highScore: Number(rawGames.dotsSos?.highScore) || 0,
+      gamesPlayed: Number(rawGames.dotsSos?.gamesPlayed) || 0,
+      wins: Number(rawGames.dotsSos?.wins) || 0,
+    },
+    tanks: {
+      highScore: Number(rawGames.tanks?.highScore) || 0,
+      gamesPlayed: Number(rawGames.tanks?.gamesPlayed) || 0,
+      wins: Number(rawGames.tanks?.wins) || 0,
+    },
+    memoryMatch: {
+      highScore: Number(rawGames.memoryMatch?.highScore) || 0,
+      gamesPlayed: Number(rawGames.memoryMatch?.gamesPlayed) || 0,
+      wins: Number(rawGames.memoryMatch?.wins) || 0,
     },
   };
 
@@ -560,15 +792,9 @@ export async function recordSoloGameResult(
     console.error("Firestore oyuncu okuma hatası:", err);
   }
 
-  const nextGames: PlayerGamesMap = {
-    blockBlast: { ...baseDoc.games.blockBlast },
-    chess: { ...baseDoc.games.chess },
-    billiards: { ...baseDoc.games.billiards },
-    solitaire: { ...baseDoc.games.solitaire },
-    sudoku: { ...baseDoc.games.sudoku },
-  };
+  const nextGames: PlayerGamesMap = cloneGamesMap(baseDoc.games);
 
-  const prevHigh = nextGames[result.game].highScore;
+  const prevHigh = nextGames[result.game]?.highScore ?? 0;
   const cleanScore = Math.max(0, Math.round(result.score));
   const isNewPersonalBest = cleanScore > prevHigh && cleanScore > 0;
 
@@ -616,6 +842,11 @@ export async function recordSoloGameResult(
             : Math.min(nextGames.sudoku.bestTimeSec, result.durationSec);
       }
     }
+  } else if (isSmartboardMultiplayerGame(result.game)) {
+    const gKey = result.game;
+    nextGames[gKey].gamesPlayed += 1;
+    nextGames[gKey].highScore = Math.max(prevHigh, cleanScore);
+    if (result.won) nextGames[gKey].wins += 1;
   }
 
   const overallBestScore = calculateOverallScore(nextGames);
@@ -636,7 +867,7 @@ export async function recordSoloGameResult(
     if (isNewPersonalBest) {
       const others = allPlayers.filter((p) => p.id !== updatedPlayer.id);
       const rankInGame =
-        others.filter((p) => p.games[result.game].highScore > cleanScore)
+        others.filter((p) => (p.games?.[result.game]?.highScore ?? 0) > cleanScore)
           .length + 1;
       const gameMeta = GAME_LABELS[result.game];
       const modeSuffix = result.modeLabel ? ` (${result.modeLabel})` : "";
@@ -682,6 +913,7 @@ export async function recordDuelGameResult(params: {
     outcome: "win" | "loss" | "draw",
     streak?: number
   ) => {
+    if (p.isBot) return;
     let base = p;
     try {
       const snap = await getDoc(doc(db, PLAYERS_COL, p.id));
@@ -695,13 +927,7 @@ export async function recordDuelGameResult(params: {
       console.error("Firestore düello oyuncusu okuma hatası:", err);
     }
 
-    const nextGames: PlayerGamesMap = {
-      blockBlast: { ...base.games.blockBlast },
-      chess: { ...base.games.chess },
-      billiards: { ...base.games.billiards },
-      solitaire: { ...base.games.solitaire },
-      sudoku: { ...base.games.sudoku },
-    };
+    const nextGames: PlayerGamesMap = cloneGamesMap(base.games);
 
     const cleanScore = Math.max(0, Math.round(myScore));
     if (params.game === "chess") {
@@ -782,6 +1008,131 @@ export async function recordDuelGameResult(params: {
   } catch (err) {
     console.error("Firestore activityFeed yazma hatası:", err);
   }
+}
+
+export interface MultiplayerStandingInput {
+  slotIndex: number;
+  player: PlayerDoc;
+  isBot?: boolean;
+  rank: number; // 1 = Şampiyon, 2 = İkinci, 3 = Üçüncü, 4 = Dördüncü
+  actionScore: number; // Oyun içi topladığı aksiyon puanı
+  statSummary?: string;
+}
+
+export interface MultiplayerFinalStanding extends MultiplayerStandingInput {
+  finalScore: number;
+  isNewPersonalBest: boolean;
+}
+
+// 2-4 Kişilik Akıllı Tahta Maçı Bittiğinde Tüm Gerçek Oyuncuların Firestore İstatistiklerini Güncelle
+export async function recordMultiplayerMatchResult(params: {
+  game: MultiplayerGameKey;
+  standings: MultiplayerStandingInput[];
+  modeLabel?: string;
+}): Promise<MultiplayerFinalStanding[]> {
+  const now = Date.now();
+  const totalPlayers = params.standings.length;
+  const championBonus = totalPlayers >= 4 ? 4500 : 3500;
+
+  // Her koltuk için adil puan hesaplama
+  const computed: MultiplayerFinalStanding[] = params.standings.map((st) => {
+    const cleanAction = Math.max(0, Math.round(st.actionScore));
+    let finalScore = 0;
+    if (st.rank === 1) {
+      // 1. Olan Oyuncu: Oyun içi aksiyon puanı + 3.500 (4 kişiyse +4.500) Şampiyonluk Bonusu
+      finalScore = cleanAction + championBonus;
+    } else if (st.rank === 2) {
+      // 2. Oyuncu: 500 - 2.500 arası performans puanı
+      finalScore = Math.min(2500, Math.max(1250, 1100 + cleanAction));
+    } else if (st.rank === 3) {
+      // 3. Oyuncu: 500 - 2.500 arası performans puanı
+      finalScore = Math.min(1850, Math.max(800, 700 + cleanAction));
+    } else {
+      // 4. Oyuncu: 500 - 2.500 arası performans puanı
+      finalScore = Math.min(1300, Math.max(500, 500 + Math.round(cleanAction * 0.8)));
+    }
+    const prevHigh = st.player.games?.[params.game]?.highScore ?? 0;
+    const isNewPersonalBest = !st.isBot && !st.player.isBot && finalScore > prevHigh;
+    return {
+      ...st,
+      finalScore,
+      isNewPersonalBest,
+    };
+  });
+
+  // Gerçek oyuncuların Firestore dökümanlarını tek seferde paralel güncelle
+  const humanStandings = computed.filter((s) => !s.isBot && !s.player.isBot);
+
+  await Promise.all(
+    humanStandings.map(async (entry) => {
+      let base = entry.player;
+      try {
+        const snap = await getDoc(doc(db, PLAYERS_COL, entry.player.id));
+        if (snap.exists()) {
+          base = normalizePlayerDoc(
+            snap.id,
+            snap.data() as Record<string, unknown>
+          );
+        }
+      } catch (err) {
+        console.error("Firestore çok oyunculu profil okuma hatası:", err);
+      }
+
+      const nextGames: PlayerGamesMap = cloneGamesMap(base.games);
+      const gStats = nextGames[params.game];
+      const prevHigh = gStats.highScore ?? 0;
+
+      gStats.gamesPlayed = (gStats.gamesPlayed || 0) + 1;
+      if (entry.rank === 1) {
+        gStats.wins = (gStats.wins || 0) + 1;
+      }
+      if (entry.finalScore > prevHigh) {
+        gStats.highScore = entry.finalScore;
+        entry.isNewPersonalBest = true;
+      }
+
+      const overallBestScore = calculateOverallScore(nextGames);
+      const { id: _omit, isBot: _omitBot, ...payload } = {
+        ...base,
+        games: nextGames,
+        overallBestScore,
+        updatedAt: now,
+      };
+      void _omit;
+      void _omitBot;
+
+      try {
+        await setDoc(doc(db, PLAYERS_COL, base.id), payload, { merge: true });
+      } catch (err) {
+        console.error("Firestore çok oyunculu skor yazma hatası:", err);
+      }
+    })
+  );
+
+  // activityFeed kayan bandına canlı maç sonucu düşür
+  try {
+    const winner =
+      computed.find((c) => c.rank === 1) ?? computed[0];
+    if (winner) {
+      const gameTitle = GAME_LABELS[params.game].title;
+      const subSuffix = params.modeLabel ? ` (${params.modeLabel})` : "";
+      const message = `${totalPlayers} kişilik ${gameTitle}${subSuffix} savaşını ${winner.player.name} kazandı! (${winner.finalScore.toLocaleString("tr-TR")} P)`;
+
+      await addDoc(collection(db, FEED_COL), {
+        playerId: winner.player.id,
+        playerName: winner.player.name,
+        avatar: winner.player.avatar,
+        game: params.game,
+        score: winner.finalScore,
+        message,
+        createdAt: now,
+      });
+    }
+  } catch (err) {
+    console.error("Firestore çok oyunculu activityFeed yazma hatası:", err);
+  }
+
+  return computed;
 }
 
 // Composite Index gerektirmeyen gerçek zamanlı Firestore onSnapshot dinleyicileri

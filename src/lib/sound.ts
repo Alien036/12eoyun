@@ -567,6 +567,332 @@ class ArcadeSoundEngine {
       osc.stop(start + dur + 0.02);
     });
   }
+
+  // Sıra değişim sesi (Yumuşak neon geçiş tınısı)
+  public playTurnChange(): void {
+    if (this.muted) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(340, now);
+    osc.frequency.exponentialRampToValueAtTime(510, now + 0.075);
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.09);
+  }
+
+  // 1) Chain Reaction: Atom küresi yerleştirme ve zincirleme dalga patlaması
+  public playChainOrbPlace(): void {
+    if (this.muted) return;
+    this.vibrate(8);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(420, now);
+    osc.frequency.exponentialRampToValueAtTime(760, now + 0.065);
+    gain.gain.setValueAtTime(0.14, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.075);
+  }
+
+  public playChainExplosion(waveDepth: number = 1): void {
+    if (this.muted) return;
+    this.vibrate(waveDepth >= 3 ? [15, 20, 18] : 14);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const clampedWave = Math.min(12, Math.max(1, waveDepth));
+    const pitchMult = Math.pow(2, (clampedWave - 1) / 10);
+
+    // Katman 1: Plazma dalgası bas vuruşu
+    const sub = ctx.createOscillator();
+    const subGain = ctx.createGain();
+    sub.type = "triangle";
+    sub.frequency.setValueAtTime(170 * pitchMult, now);
+    sub.frequency.exponentialRampToValueAtTime(52, now + 0.14);
+    subGain.gain.setValueAtTime(0.24, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    sub.connect(subGain);
+    subGain.connect(ctx.destination);
+    sub.start(now);
+    sub.stop(now + 0.16);
+
+    // Katman 2: Atomik kristal parıltı
+    const ping = ctx.createOscillator();
+    const pingGain = ctx.createGain();
+    ping.type = "sine";
+    ping.frequency.setValueAtTime(520 * pitchMult, now);
+    ping.frequency.exponentialRampToValueAtTime(980 * pitchMult, now + 0.11);
+    pingGain.gain.setValueAtTime(0.13, now);
+    pingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    ping.connect(pingGain);
+    pingGain.connect(ctx.destination);
+    ping.start(now);
+    ping.stop(now + 0.13);
+  }
+
+  // 2) Kızma Birader (Ludo): 3D Zar Tıkırtısı, Piyon Adımı ve Kırma Şovu
+  public playDiceRoll(): void {
+    if (this.muted) return;
+    this.vibrate([10, 25, 10, 25, 14]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // 5 ardışık kemik/akrilik zar çarpma tıkırtısı
+    const offsets = [0, 0.055, 0.115, 0.18, 0.25];
+    offsets.forEach((off, idx) => {
+      const t = now + off;
+      const noise = ctx.createBufferSource();
+      noise.buffer = this.createNoiseBuffer(ctx, 0.025);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(1400 + idx * 180, t);
+      filter.Q.setValueAtTime(3.0, t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.2, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.024);
+      noise.connect(filter);
+      filter.connect(g);
+      g.connect(ctx.destination);
+      noise.start(t);
+
+      const tone = ctx.createOscillator();
+      const tg = ctx.createGain();
+      tone.type = "triangle";
+      tone.frequency.setValueAtTime(520 + idx * 75, t);
+      tone.frequency.exponentialRampToValueAtTime(240, t + 0.03);
+      tg.gain.setValueAtTime(0.12, t);
+      tg.gain.exponentialRampToValueAtTime(0.001, t + 0.032);
+      tone.connect(tg);
+      tg.connect(ctx.destination);
+      tone.start(t);
+      tone.stop(t + 0.035);
+    });
+  }
+
+  public playPawnStep(stepIdx: number = 0): void {
+    if (this.muted) return;
+    this.vibrate(6);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const freq = 440 + (stepIdx % 6) * 45;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, now);
+    osc.frequency.exponentialRampToValueAtTime(freq * 1.35, now + 0.055);
+    gain.gain.setValueAtTime(0.14, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.065);
+  }
+
+  public playLudoCapture(): void {
+    if (this.muted) return;
+    this.vibrate([25, 30, 35]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const smash = ctx.createOscillator();
+    const sGain = ctx.createGain();
+    smash.type = "sawtooth";
+    smash.frequency.setValueAtTime(320, now);
+    smash.frequency.exponentialRampToValueAtTime(64, now + 0.22);
+    sGain.gain.setValueAtTime(0.24, now);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+    smash.connect(sGain);
+    sGain.connect(ctx.destination);
+    smash.start(now);
+    smash.stop(now + 0.25);
+
+    const cheer = [587.33, 880.0];
+    cheer.forEach((f, i) => {
+      const st = now + 0.06 + i * 0.06;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(f, st);
+      g.gain.setValueAtTime(0.15, st);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.16);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(st);
+      osc.stop(st + 0.17);
+    });
+  }
+
+  // 3) Kare Kapmaca & SOS Arenası: Neon Çizgi ve Lazer SOS Sesi
+  public playLaserLine(): void {
+    if (this.muted) return;
+    this.vibrate(8);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(420, now + 0.065);
+    gain.gain.setValueAtTime(0.13, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.075);
+  }
+
+  public playLaserSos(combo: number = 1): void {
+    if (this.muted) return;
+    this.vibrate([16, 22, 20]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const mult = Math.pow(2, Math.min(8, Math.max(0, combo - 1)) / 12);
+
+    // Lazer tarama ışını
+    const beam = ctx.createOscillator();
+    const bGain = ctx.createGain();
+    beam.type = "sawtooth";
+    beam.frequency.setValueAtTime(440 * mult, now);
+    beam.frequency.exponentialRampToValueAtTime(1320 * mult, now + 0.16);
+    bGain.gain.setValueAtTime(0.14, now);
+    bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    beam.connect(bGain);
+    bGain.connect(ctx.destination);
+    beam.start(now);
+    beam.stop(now + 0.19);
+
+    // Akor onayı
+    const notes = [523.25 * mult, 659.25 * mult, 783.99 * mult];
+    notes.forEach((f, idx) => {
+      const st = now + idx * 0.04;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(f, st);
+      g.gain.setValueAtTime(0.13, st);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.18);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(st);
+      osc.stop(st + 0.19);
+    });
+  }
+
+  // 4) Topçu Tanklar: Top Atışı + Mermi Islığı + Krater Patlaması
+  public playTankFire(): void {
+    if (this.muted) return;
+    this.vibrate([20, 20]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Namlu patlaması
+    const boom = ctx.createOscillator();
+    const bGain = ctx.createGain();
+    boom.type = "sawtooth";
+    boom.frequency.setValueAtTime(190, now);
+    boom.frequency.exponentialRampToValueAtTime(45, now + 0.16);
+    bGain.gain.setValueAtTime(0.26, now);
+    bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    boom.connect(bGain);
+    bGain.connect(ctx.destination);
+    boom.start(now);
+    boom.stop(now + 0.19);
+
+    // Kısa mermi ıslığı
+    const whistle = ctx.createOscillator();
+    const wGain = ctx.createGain();
+    whistle.type = "sine";
+    whistle.frequency.setValueAtTime(980, now + 0.04);
+    whistle.frequency.exponentialRampToValueAtTime(460, now + 0.34);
+    wGain.gain.setValueAtTime(0.07, now + 0.04);
+    wGain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+    whistle.connect(wGain);
+    wGain.connect(ctx.destination);
+    whistle.start(now + 0.04);
+    whistle.stop(now + 0.37);
+  }
+
+  public playTankExplosion(isBig: boolean = false): void {
+    if (this.muted) return;
+    this.vibrate(isBig ? [35, 30, 45] : [25, 25]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const dur = isBig ? 0.42 : 0.28;
+
+    // Gürültü krater patlaması (lowpass)
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.createNoiseBuffer(ctx, dur);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(isBig ? 620 : 480, now);
+    filter.frequency.exponentialRampToValueAtTime(75, now + dur);
+    const nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(isBig ? 0.36 : 0.28, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    noise.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ctx.destination);
+    noise.start(now);
+
+    // Alt bas sarsıntısı
+    const sub = ctx.createOscillator();
+    const sGain = ctx.createGain();
+    sub.type = "sine";
+    sub.frequency.setValueAtTime(125, now);
+    sub.frequency.exponentialRampToValueAtTime(32, now + dur);
+    sGain.gain.setValueAtTime(0.32, now);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    sub.connect(sGain);
+    sGain.connect(ctx.destination);
+    sub.start(now);
+    sub.stop(now + dur + 0.02);
+  }
+
+  // 5) Hafıza Arenası: Kart Eşleşme Sesi (Komboya göre yükselen kristal akor)
+  public playMemoryMatch(combo: number = 1): void {
+    if (this.muted) return;
+    this.vibrate([14, 22, 16]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const shift = Math.min(10, Math.max(0, combo - 1));
+    const mult = Math.pow(2, shift / 12);
+    const chord = [523.25 * mult, 659.25 * mult, 783.99 * mult, 1046.5 * mult];
+
+    chord.forEach((f, idx) => {
+      const st = now + idx * 0.038;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(f, st);
+      g.gain.setValueAtTime(0.15, st);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.22);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(st);
+      osc.stop(st + 0.24);
+    });
+  }
 }
 
 export const sound = new ArcadeSoundEngine();
