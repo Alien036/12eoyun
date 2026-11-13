@@ -20,16 +20,23 @@ export type GameKey =
   | "ludo"
   | "dotsSos"
   | "tanks"
-  | "memoryMatch";
+  | "memoryMatch"
+  | "buckshot"
+  | "liarsRoulette"
+  | "wireRoulette";
 
 export type MultiplayerGameKey =
   | "chainReaction"
   | "ludo"
   | "dotsSos"
   | "tanks"
-  | "memoryMatch";
+  | "memoryMatch"
+  | "liarsRoulette";
 
 export const ALL_GAME_KEYS: GameKey[] = [
+  "buckshot",
+  "liarsRoulette",
+  "wireRoulette",
   "blockBlast",
   "chess",
   "billiards",
@@ -48,6 +55,7 @@ export const MULTIPLAYER_GAME_KEYS: MultiplayerGameKey[] = [
   "dotsSos",
   "tanks",
   "memoryMatch",
+  "liarsRoulette",
 ];
 
 export function isSmartboardMultiplayerGame(
@@ -198,6 +206,21 @@ export const GAME_LABELS: Record<
     icon: "🧠",
     accent: "text-emerald-300",
   },
+  buckshot: {
+    title: "Buckshot Roulette",
+    icon: "🔫",
+    accent: "text-red-400",
+  },
+  liarsRoulette: {
+    title: "Blöf Ruleti",
+    icon: "💀",
+    accent: "text-amber-400",
+  },
+  wireRoulette: {
+    title: "Yüksek Gerilim",
+    icon: "⚡",
+    accent: "text-yellow-300",
+  },
 };
 
 export interface SmartboardSlotTheme {
@@ -329,6 +352,9 @@ export interface PlayerGamesMap {
   dotsSos: MultiplayerArenaStats;
   tanks: MultiplayerArenaStats;
   memoryMatch: MultiplayerArenaStats;
+  buckshot: MultiplayerArenaStats;
+  liarsRoulette: MultiplayerArenaStats;
+  wireRoulette: MultiplayerArenaStats;
 }
 
 export interface PlayerDoc {
@@ -402,6 +428,9 @@ export function createEmptyGamesMap(): PlayerGamesMap {
     dotsSos: { highScore: 0, gamesPlayed: 0, wins: 0 },
     tanks: { highScore: 0, gamesPlayed: 0, wins: 0 },
     memoryMatch: { highScore: 0, gamesPlayed: 0, wins: 0 },
+    buckshot: { highScore: 0, gamesPlayed: 0, wins: 0 },
+    liarsRoulette: { highScore: 0, gamesPlayed: 0, wins: 0 },
+    wireRoulette: { highScore: 0, gamesPlayed: 0, wins: 0 },
   };
 }
 
@@ -419,6 +448,9 @@ export function cloneGamesMap(games?: Partial<PlayerGamesMap>): PlayerGamesMap {
     dotsSos: { ...empty.dotsSos, ...games.dotsSos },
     tanks: { ...empty.tanks, ...games.tanks },
     memoryMatch: { ...empty.memoryMatch, ...games.memoryMatch },
+    buckshot: { ...empty.buckshot, ...games.buckshot },
+    liarsRoulette: { ...empty.liarsRoulette, ...games.liarsRoulette },
+    wireRoulette: { ...empty.wireRoulette, ...games.wireRoulette },
   };
 }
 
@@ -453,7 +485,10 @@ export function calculateOverallScore(games: Partial<PlayerGamesMap>): number {
     (Number(games?.ludo?.highScore) || 0) +
     (Number(games?.dotsSos?.highScore) || 0) +
     (Number(games?.tanks?.highScore) || 0) +
-    (Number(games?.memoryMatch?.highScore) || 0)
+    (Number(games?.memoryMatch?.highScore) || 0) +
+    (Number(games?.buckshot?.highScore) || 0) +
+    (Number(games?.liarsRoulette?.highScore) || 0) +
+    (Number(games?.wireRoulette?.highScore) || 0)
   );
 }
 
@@ -489,6 +524,18 @@ export function normalizePlayerDoc(
   const mmSan = sanitizeStoredHighScore(
     "memoryMatch",
     rawGames.memoryMatch?.highScore
+  );
+  const bsSan = sanitizeStoredHighScore(
+    "buckshot",
+    rawGames.buckshot?.highScore
+  );
+  const lrSan = sanitizeStoredHighScore(
+    "liarsRoulette",
+    rawGames.liarsRoulette?.highScore
+  );
+  const wrSan = sanitizeStoredHighScore(
+    "wireRoulette",
+    rawGames.wireRoulette?.highScore
   );
 
   const games: PlayerGamesMap = {
@@ -553,6 +600,21 @@ export function normalizePlayerDoc(
       gamesPlayed: Number(rawGames.memoryMatch?.gamesPlayed) || 0,
       wins: Number(rawGames.memoryMatch?.wins) || 0,
     },
+    buckshot: {
+      highScore: bsSan.value,
+      gamesPlayed: Number(rawGames.buckshot?.gamesPlayed) || 0,
+      wins: Number(rawGames.buckshot?.wins) || 0,
+    },
+    liarsRoulette: {
+      highScore: lrSan.value,
+      gamesPlayed: Number(rawGames.liarsRoulette?.gamesPlayed) || 0,
+      wins: Number(rawGames.liarsRoulette?.wins) || 0,
+    },
+    wireRoulette: {
+      highScore: wrSan.value,
+      gamesPlayed: Number(rawGames.wireRoulette?.gamesPlayed) || 0,
+      wins: Number(rawGames.wireRoulette?.wins) || 0,
+    },
   };
 
   const overallBestScore = calculateOverallScore(games);
@@ -569,6 +631,9 @@ export function normalizePlayerDoc(
     dsSan.wasInflated ||
     tkSan.wasInflated ||
     mmSan.wasInflated ||
+    bsSan.wasInflated ||
+    lrSan.wasInflated ||
+    wrSan.wasInflated ||
     Number(raw.overallBestScore) !== overallBestScore;
 
   // Eğer Firestore'da eski testlerden kalan 10.000+ şişik skor varsa profili silmeden otomatik 4.500'e çekip güncelle
@@ -852,6 +917,7 @@ export interface SoloResultPayload {
   bestStreak?: number;
   durationSec?: number;
   modeLabel?: string;
+  customFeedMessage?: string;
 }
 
 // Tek Kişilik Oyun Sonucunu Firestore'a İşle & Rekor Kırıldıysa activityFeed'e Yaz
@@ -925,6 +991,14 @@ export async function recordSoloGameResult(
             : Math.min(nextGames.sudoku.bestTimeSec, result.durationSec);
       }
     }
+  } else if (result.game === "buckshot") {
+    nextGames.buckshot.gamesPlayed += 1;
+    nextGames.buckshot.highScore = Math.max(prevHigh, cleanScore);
+    if (result.won) nextGames.buckshot.wins += 1;
+  } else if (result.game === "wireRoulette") {
+    nextGames.wireRoulette.gamesPlayed += 1;
+    nextGames.wireRoulette.highScore = Math.max(prevHigh, cleanScore);
+    if (result.won) nextGames.wireRoulette.wins += 1;
   } else if (isSmartboardMultiplayerGame(result.game)) {
     const gKey = result.game;
     nextGames[gKey].gamesPlayed += 1;
@@ -947,7 +1021,7 @@ export async function recordSoloGameResult(
       merge: true,
     });
 
-    if (isNewPersonalBest) {
+    if (isNewPersonalBest || result.customFeedMessage) {
       const others = allPlayers.filter((p) => p.id !== updatedPlayer.id);
       const rankInGame =
         others.filter((p) => (p.games?.[result.game]?.highScore ?? 0) > cleanScore)
@@ -956,9 +1030,10 @@ export async function recordSoloGameResult(
       const modeSuffix = result.modeLabel ? ` (${result.modeLabel})` : "";
 
       const message =
-        rankInGame === 1
+        result.customFeedMessage ||
+        (rankInGame === 1
           ? `${updatedPlayer.name}, ${gameMeta.title}${modeSuffix} oyununda ${cleanScore.toLocaleString("tr-TR")} puanla 1. sıraya yerleşti!`
-          : `${updatedPlayer.name}, ${gameMeta.title}${modeSuffix} oyununda ${cleanScore.toLocaleString("tr-TR")} puanla yeni rekor kırdı! (#${rankInGame})`;
+          : `${updatedPlayer.name}, ${gameMeta.title}${modeSuffix} oyununda ${cleanScore.toLocaleString("tr-TR")} puanla yeni rekor kırdı! (#${rankInGame})`);
 
       await addDoc(collection(db, FEED_COL), {
         playerId: updatedPlayer.id,
@@ -979,7 +1054,7 @@ export async function recordSoloGameResult(
 
 // 2 Kişilik Sınıf Düellosu Sonucunu Her İki Oyuncunun Firestore Profiline ve activityFeed'e İşle
 export async function recordDuelGameResult(params: {
-  game: "chess" | "billiards";
+  game: "chess" | "billiards" | "buckshot" | "wireRoulette";
   player1: PlayerDoc;
   player2: PlayerDoc;
   winner: 1 | 2 | "draw";
@@ -987,6 +1062,7 @@ export async function recordDuelGameResult(params: {
   p2Score: number;
   p1Streak?: number;
   p2Streak?: number;
+  customFeedMessage?: string;
 }): Promise<void> {
   const now = Date.now();
 
@@ -1021,7 +1097,7 @@ export async function recordDuelGameResult(params: {
       );
       if (outcome === "win") nextGames.chess.wins += 1;
       if (outcome === "loss") nextGames.chess.losses += 1;
-    } else {
+    } else if (params.game === "billiards") {
       nextGames.billiards.gamesPlayed += 1;
       nextGames.billiards.highScore = Math.max(
         nextGames.billiards.highScore,
@@ -1032,6 +1108,20 @@ export async function recordDuelGameResult(params: {
         nextGames.billiards.bestStreak,
         streak || 0
       );
+    } else if (params.game === "buckshot") {
+      nextGames.buckshot.gamesPlayed += 1;
+      nextGames.buckshot.highScore = Math.max(
+        nextGames.buckshot.highScore,
+        cleanScore
+      );
+      if (outcome === "win") nextGames.buckshot.wins += 1;
+    } else if (params.game === "wireRoulette") {
+      nextGames.wireRoulette.gamesPlayed += 1;
+      nextGames.wireRoulette.highScore = Math.max(
+        nextGames.wireRoulette.highScore,
+        cleanScore
+      );
+      if (outcome === "win") nextGames.wireRoulette.wins += 1;
     }
 
     const overallBestScore = calculateOverallScore(nextGames);
@@ -1069,14 +1159,20 @@ export async function recordDuelGameResult(params: {
 
     if (params.winner === 1) {
       hero = params.player1;
-      bestDuelScore = params.p1Score;
-      message = `${params.player1.name}, ${gameTitle} düellosunda ${params.player2.name}'i yendi! (${params.p1Score.toLocaleString("tr-TR")} P)`;
+      bestDuelScore = clampGameScore(params.game, params.p1Score);
+      message =
+        params.customFeedMessage ||
+        `${params.player1.name}, ${gameTitle} düellosunda ${params.player2.name}'i yendi! (${bestDuelScore.toLocaleString("tr-TR")} P)`;
     } else if (params.winner === 2) {
       hero = params.player2;
-      bestDuelScore = params.p2Score;
-      message = `${params.player2.name}, ${gameTitle} düellosunda ${params.player1.name}'i yendi! (${params.p2Score.toLocaleString("tr-TR")} P)`;
+      bestDuelScore = clampGameScore(params.game, params.p2Score);
+      message =
+        params.customFeedMessage ||
+        `${params.player2.name}, ${gameTitle} düellosunda ${params.player1.name}'i yendi! (${bestDuelScore.toLocaleString("tr-TR")} P)`;
     } else {
-      message = `${params.player1.name} ve ${params.player2.name} arasındaki ${gameTitle} düellosu berabere bitti!`;
+      message =
+        params.customFeedMessage ||
+        `${params.player1.name} ve ${params.player2.name} arasındaki ${gameTitle} düellosu berabere bitti!`;
     }
 
     await addDoc(collection(db, FEED_COL), {
@@ -1113,6 +1209,7 @@ export async function recordMultiplayerMatchResult(params: {
   game: MultiplayerGameKey;
   standings: MultiplayerStandingInput[];
   modeLabel?: string;
+  customFeedMessage?: string;
 }): Promise<MultiplayerFinalStanding[]> {
   const now = Date.now();
   const totalPlayers = params.standings.length;
@@ -1124,6 +1221,13 @@ export async function recordMultiplayerMatchResult(params: {
 
     if (typeof st.customFinalScore === "number") {
       rawFinal = st.customFinalScore;
+    } else if (params.game === "liarsRoulette") {
+      const champBase = totalPlayers >= 4 ? 3600 : totalPlayers === 3 ? 3200 : 2800;
+      const bonus = Math.min(900, cleanAction);
+      if (st.rank === 1) rawFinal = champBase + bonus;
+      else if (st.rank === 2) rawFinal = 1350 + Math.round(bonus * 0.5);
+      else if (st.rank === 3) rawFinal = 800 + Math.round(bonus * 0.35);
+      else rawFinal = 450 + Math.round(bonus * 0.25);
     } else if (params.game === "chainReaction") {
       if (st.rank === 1) {
         rawFinal = 2400 + totalPlayers * 250 + Math.min(2200, cleanAction);
@@ -1226,7 +1330,9 @@ export async function recordMultiplayerMatchResult(params: {
     if (winner) {
       const gameTitle = GAME_LABELS[params.game].title;
       const subSuffix = params.modeLabel ? ` (${params.modeLabel})` : "";
-      const message = `${totalPlayers} kişilik ${gameTitle}${subSuffix} savaşını ${winner.player.name} kazandı! (${winner.finalScore.toLocaleString("tr-TR")} P)`;
+      const message =
+        params.customFeedMessage ||
+        `${totalPlayers} kişilik ${gameTitle}${subSuffix} savaşını ${winner.player.name} kazandı! (${winner.finalScore.toLocaleString("tr-TR")} P)`;
 
       await addDoc(collection(db, FEED_COL), {
         playerId: winner.player.id,

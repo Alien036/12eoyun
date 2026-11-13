@@ -42,13 +42,16 @@ import LudoView from "@/games/ludo/LudoView";
 import DotsSosView from "@/games/dots-sos/DotsSosView";
 import TanksView from "@/games/tanks/TanksView";
 import MemoryMatchView from "@/games/memory-match/MemoryMatchView";
+import BuckshotView from "@/games/buckshot/BuckshotView";
+import LiarsRouletteView from "@/games/liars-roulette/LiarsRouletteView";
+import WireRouletteView from "@/games/wire-roulette/WireRouletteView";
 
 interface GameCardConfig {
   key: GameKey;
   title: string;
   icon: string;
   badge: string;
-  category: "smartboard" | "classic";
+  category: "psychological" | "smartboard" | "classic";
   playerCountTag: string;
   description: string;
   gradient: string;
@@ -62,7 +65,44 @@ const SPRING_LIQUID = {
 };
 
 const ARCADE_GAMES: GameCardConfig[] = [
-  // --- 5 YENİ AKILLI TAHTA (2-4 KİŞİ) OYUNU ---
+  // --- 3 YENİ YÜKSEK GERİLİMLİ PSİKOLOJİK DÜELLO OYUNU ---
+  {
+    key: "buckshot",
+    title: "Buckshot Roulette",
+    icon: "🔫",
+    badge: "%100 Orijinal • 9 Eşya • CRT",
+    category: "psychological",
+    playerCountTag: "Krupiye AI & 2 Kişilik Düello",
+    description:
+      "Paslı yeraltı masası, CRT defibrilatör, 3.5 sn mermi şovu, El Testeresi, Kelepçe, Adrenalin ve Avuç İçi Gizli Bakış!",
+    gradient: "from-red-600/35 via-amber-900/25 to-stone-950/95",
+    borderGlow: "hover:border-red-400/75",
+  },
+  {
+    key: "liarsRoulette",
+    title: "Blöf Ruleti (Liar's Table)",
+    icon: "💀",
+    badge: "Gizli Zar Kupası • Altıpatlar",
+    category: "psychological",
+    playerCountTag: "2-4 Kişilik Psikolojik Masa",
+    description:
+      "Kupanın altındaki 5 zara gizlice bak, iddiayı yükselt ya da 'YALANCI! KUPALARI AÇ!' diyerek rakibine tetik çektir!",
+    gradient: "from-amber-600/30 via-stone-800/25 to-stone-950/95",
+    borderGlow: "hover:border-amber-400/75",
+  },
+  {
+    key: "wireRoulette",
+    title: "Yüksek Gerilim (Kablo Ruleti)",
+    icon: "⚡",
+    badge: "8 Gergin Kablo • Voltmetre",
+    category: "psychological",
+    playerCountTag: "1-2 Kişilik Gerilim Düellosu",
+    description:
+      "3 Patlayıcı Faz, 4 Boş Hat, 1 Aşırı Yük! Yan keskiyle kabloları kes; Voltmetre, Çift Kesim ve İzolatör Eldiven kullan!",
+    gradient: "from-yellow-500/25 via-rose-900/20 to-slate-950/95",
+    borderGlow: "hover:border-yellow-400/75",
+  },
+  // --- 5 AKILLI TAHTA (2-4 KİŞİ) OYUNU ---
   {
     key: "chainReaction",
     title: "Chain Reaction (Zincirleme)",
@@ -195,7 +235,7 @@ const NAV_ITEMS: {
 }[] = [
   {
     key: "arcade",
-    label: "10 Oyun",
+    label: "13 Oyun",
     Icon: Gamepad2,
     pillClass: "bg-indigo-600 shadow-[0_0_16px_rgba(99,102,241,0.55)]",
     textActiveClass: "text-white",
@@ -221,7 +261,7 @@ export default function ArcadeHub() {
     "arcade" | "leaderboard" | "profiles"
   >("arcade");
   const [filterCategory, setFilterCategory] = useState<
-    "all" | "smartboard" | "classic"
+    "all" | "psychological" | "smartboard" | "classic"
   >("all");
 
   // Aktif çalışan oyun oturumu (Sadece RAM'de tutulur; kesinlikle localStorage/cookie kullanılmaz!)
@@ -417,12 +457,11 @@ export default function ArcadeHub() {
                   12-E Sınıf Oyun Merkezi
                 </h1>
                 <span className="hidden sm:inline-block rounded-full bg-indigo-500/25 border border-indigo-400/35 px-2.5 py-0.5 text-[10px] font-black text-indigo-300">
-                  10 OYUN • AKILLI TAHTA ARENASI
+                  13 OYUN • AKILLI TAHTA & PSİKOLOJİK DÜELLO
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 hidden xs:block">
-                2-4 Kişilik Dokunmatik Akıllı Tahta Oyunları • Hayalet PIN
-                Koruması
+                Buckshot Roulette • Akıllı Tahta Oyunları • Hayalet PIN Koruması
               </p>
             </div>
           </motion.button>
@@ -596,6 +635,42 @@ export default function ArcadeHub() {
               onComboEnergyChange={handleComboEnergy}
             />
           )}
+
+          {/* YENİ 3 YÜKSEK GERİLİMLİ PSİKOLOJİK DÜELLO OYUNU */}
+          {activeSession.game === "buckshot" && (
+            <BuckshotView
+              mode={activeSession.mode === "duel" ? "duel" : "solo"}
+              player1={syncedP1}
+              player2={syncedP2}
+              initialSubMode={activeSession.subMode}
+              allPlayers={players}
+              onBackToHub={handleExitGameToHub}
+              onRequestNewGameWithGate={handleRestartViaGate}
+              onComboEnergyChange={handleComboEnergy}
+            />
+          )}
+
+          {activeSession.game === "liarsRoulette" &&
+            syncedSeats.length >= 2 && (
+              <LiarsRouletteView
+                seats={syncedSeats}
+                onBackToHub={handleExitGameToHub}
+                onRequestNewGameWithGate={handleRestartViaGate}
+                onComboEnergyChange={handleComboEnergy}
+              />
+            )}
+
+          {activeSession.game === "wireRoulette" && (
+            <WireRouletteView
+              mode={activeSession.mode === "duel" ? "duel" : "solo"}
+              player1={syncedP1}
+              player2={syncedP2}
+              allPlayers={players}
+              onBackToHub={handleExitGameToHub}
+              onRequestNewGameWithGate={handleRestartViaGate}
+              onComboEnergyChange={handleComboEnergy}
+            />
+          )}
         </motion.main>
       ) : (
         <main className="relative z-10 flex-1 w-full max-w-6xl overflow-y-auto pr-0.5 pb-6 min-h-0">
@@ -649,12 +724,16 @@ export default function ArcadeHub() {
                   </div>
 
                   {/* Kategori Seçici Haplar */}
-                  <div className="flex items-center gap-1.5 rounded-2xl border border-white/12 bg-slate-900/85 p-1 shrink-0">
+                  <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/12 bg-slate-900/85 p-1 shrink-0">
                     {[
-                      { key: "all", label: "🔥 Tüm Oyunlar (10)" },
+                      { key: "all", label: "🔥 Tüm Oyunlar (13)" },
+                      {
+                        key: "psychological",
+                        label: "💀 Psikolojik Düello (3)",
+                      },
                       {
                         key: "smartboard",
-                        label: "🖥️ Akıllı Tahta (2-4 Kişi)",
+                        label: "🖥️ Akıllı Tahta (5)",
                       },
                       { key: "classic", label: "🎮 Klasik & Düello (5)" },
                     ].map((tab) => {
@@ -666,7 +745,11 @@ export default function ArcadeHub() {
                           onClick={() => {
                             sound.playClick();
                             setFilterCategory(
-                              tab.key as "all" | "smartboard" | "classic"
+                              tab.key as
+                                | "all"
+                                | "psychological"
+                                | "smartboard"
+                                | "classic"
                             );
                           }}
                           className={`min-h-[40px] rounded-xl px-3 py-1.5 text-xs font-extrabold transition cursor-pointer ${
@@ -791,15 +874,15 @@ export default function ArcadeHub() {
                       <div className="flex items-center justify-between">
                         <span className="text-2xl">🏆</span>
                         <span className="rounded-full bg-amber-500/20 border border-amber-400/40 px-2.5 py-0.5 text-[10px] font-black text-amber-300">
-                          10 OYUN TOPLAMI • CANLI LİDERLİK
+                          13 OYUN TOPLAMI • CANLI LİDERLİK
                         </span>
                       </div>
                       <h2 className="mt-2 text-base font-black text-white">
-                        Genel Sınıf Krallığı (10 Oyun Rekor Toplamı)
+                        Genel Sınıf Krallığı (13 Oyun Rekor Toplamı)
                       </h2>
                       <p className="mt-0.5 text-xs text-slate-300">
-                        Hem 5 klasik oyundaki hem de 5 akıllı tahta oyunundaki
-                        en yüksek rekorlarının toplamı Genel Sınıf Sıralamanı
+                        Psikolojik düello, akıllı tahta ve klasik oyunlardaki en
+                        yüksek rekorlarının toplamı Genel Sınıf Sıralamanı
                         belirler!
                       </p>
 

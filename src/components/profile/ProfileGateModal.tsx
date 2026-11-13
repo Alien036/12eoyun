@@ -82,7 +82,11 @@ export default function ProfileGateModal({
   const isMultiArena = targetGame
     ? isSmartboardMultiplayerGame(targetGame)
     : false;
-  const supportsDuel = targetGame === "chess" || targetGame === "billiards";
+  const supportsDuel =
+    targetGame === "chess" ||
+    targetGame === "billiards" ||
+    targetGame === "buckshot" ||
+    targetGame === "wireRoulette";
 
   const [step, setStep] = useState<
     "mode" | "multi_setup" | "pick_player" | "vs_clash"
@@ -120,7 +124,11 @@ export default function ProfileGateModal({
   useEffect(() => {
     if (isOpen && targetGame) {
       const multi = isSmartboardMultiplayerGame(targetGame);
-      const duelCapable = targetGame === "chess" || targetGame === "billiards";
+      const duelCapable =
+        targetGame === "chess" ||
+        targetGame === "billiards" ||
+        targetGame === "buckshot" ||
+        targetGame === "wireRoulette";
 
       if (multi) {
         setStep("multi_setup");
@@ -134,7 +142,7 @@ export default function ProfileGateModal({
         setStep("mode");
         setSelectedMode("solo");
         setTargetSeatCount(1 as unknown as 2);
-        setSelectedSubMode("");
+        setSelectedSubMode(targetGame === "buckshot" ? "series3" : "");
       } else {
         setStep("pick_player");
         setSelectedMode("solo");
@@ -185,6 +193,7 @@ export default function ProfileGateModal({
           mode: "duel",
           player1: verifiedSeats[0].player,
           player2: verifiedSeats[1].player,
+          subMode: selectedSubMode || undefined,
         });
       }
     }, 1500);
@@ -226,6 +235,7 @@ export default function ProfileGateModal({
           game: targetGame,
           mode: "solo",
           player1: chosenPlayer,
+          subMode: selectedSubMode || undefined,
         });
         return;
       }
@@ -258,6 +268,7 @@ export default function ProfileGateModal({
     [
       targetGame,
       selectedMode,
+      selectedSubMode,
       verifiedSeats,
       currentSeatIndex,
       targetSeatCount,
@@ -776,8 +787,56 @@ export default function ProfileGateModal({
                       </motion.button>
                     </div>
                   ) : step === "mode" ? (
-                    /* SATRANÇ & BİLARDO MOD SEÇİMİ */
+                    /* SATRANÇ, BİLARDO, BUCKSHOT ROULETTE & YÜKSEK GERİLİM MOD SEÇİMİ */
                     <div className="space-y-3">
+                      {targetGame === "buckshot" && (
+                        <div className="rounded-2xl border border-amber-500/35 bg-stone-950/90 p-3">
+                          <div className="text-xs font-black text-amber-300 mb-2">
+                            ⚡ Maç Formatı Seç:
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                sound.playClick();
+                                setSelectedSubMode("series3");
+                              }}
+                              className={`min-h-[48px] rounded-xl border p-2 text-left transition cursor-pointer ${
+                                selectedSubMode !== "fast1"
+                                  ? "border-amber-400 bg-amber-500/20 text-white"
+                                  : "border-white/10 bg-white/5 text-slate-400"
+                              }`}
+                            >
+                              <div className="text-xs font-black">
+                                Tam 3 Rauntluk Seri
+                              </div>
+                              <div className="text-[10px] text-slate-300">
+                                2⚡ • 4⚡ • 5⚡ (Kesik Kablo Finali)
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                sound.playClick();
+                                setSelectedSubMode("fast1");
+                              }}
+                              className={`min-h-[48px] rounded-xl border p-2 text-left transition cursor-pointer ${
+                                selectedSubMode === "fast1"
+                                  ? "border-red-400 bg-red-500/25 text-white"
+                                  : "border-white/10 bg-white/5 text-slate-400"
+                              }`}
+                            >
+                              <div className="text-xs font-black">
+                                Hızlı Tek Raunt (5⚡)
+                              </div>
+                              <div className="text-[10px] text-slate-300">
+                                Teneffüs Modu • Tek Maç
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       <motion.button
                         type="button"
                         whileHover={{ scale: 1.02 }}
@@ -796,10 +855,16 @@ export default function ProfileGateModal({
                         </div>
                         <div>
                           <div className="text-sm font-black text-white">
-                            Tek Kişilik (Yapay Zeka / Arcade)
+                            {targetGame === "buckshot"
+                              ? "Krupiye'ye Karşı (Tek Kişilik — Dealer AI)"
+                              : "Tek Kişilik (Yapay Zeka / Arcade)"}
                           </div>
                           <p className="mt-0.5 text-xs text-slate-300">
-                            {targetGame === "chess"
+                            {targetGame === "buckshot"
+                              ? "Eldivenli yeraltı Krupiyesine karşı 9 orijinal eşya ve pompalı tüfekle psikolojik düello!"
+                              : targetGame === "wireRoulette"
+                              ? "Başmühendis Bot'a karşı 8 gergin kablolu sigorta kutusunda hayatta kalma mücadelesi."
+                              : targetGame === "chess"
                               ? "Kolay, Orta veya Zor seviyeli akıllı satranç botuna karşı oyna."
                               : "15 topu en az vuruşla ve seri kombosuyla deliklere sokarak rekor kır."}
                           </p>

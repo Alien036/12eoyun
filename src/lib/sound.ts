@@ -925,6 +925,362 @@ class ArcadeSoundEngine {
       osc.stop(start + 0.24);
     });
   }
+
+  // ============================================================================
+  // YÜKSEK GERİLİMLİ PSİKOLOJİK DÜELLO SES MOTORU (Buckshot, Blöf & Kablo Ruleti)
+  // ============================================================================
+
+  // Pompalı Tüfek Mekanik Kurma (*ŞAK-ŞAK* mermi sürme sesi)
+  public playShotgunRack(): void {
+    if (this.muted) return;
+    this.vibrate([18, 45, 22]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // 1. darbe: Geri çekiş (*ŞAK*)
+    const strokes = [
+      { offset: 0, filterFreq: 1350, pitchStart: 280, pitchEnd: 110 },
+      { offset: 0.13, filterFreq: 1750, pitchStart: 360, pitchEnd: 140 },
+    ];
+
+    strokes.forEach((st) => {
+      const t = now + st.offset;
+      const noise = ctx.createBufferSource();
+      noise.buffer = this.createNoiseBuffer(ctx, 0.065);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(st.filterFreq, t);
+      filter.Q.setValueAtTime(2.4, t);
+      const nGain = ctx.createGain();
+      nGain.gain.setValueAtTime(0.32, t);
+      nGain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+      noise.connect(filter);
+      filter.connect(nGain);
+      nGain.connect(ctx.destination);
+      noise.start(t);
+
+      const metal = ctx.createOscillator();
+      const mGain = ctx.createGain();
+      metal.type = "sawtooth";
+      metal.frequency.setValueAtTime(st.pitchStart, t);
+      metal.frequency.exponentialRampToValueAtTime(st.pitchEnd, t + 0.055);
+      mGain.gain.setValueAtTime(0.22, t);
+      mGain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+      metal.connect(mGain);
+      mGain.connect(ctx.destination);
+      metal.start(t);
+      metal.stop(t + 0.065);
+    });
+  }
+
+  // Pompalı Tüfek DOLU (Kırmızı) Ateşleme: Ağır alt bas patlama + gürültü + kulak çınlaması
+  public playShotgunBlast(isSawedOff: boolean = false): void {
+    if (this.muted) return;
+    this.vibrate(isSawedOff ? [70, 30, 90, 40, 60] : [55, 25, 70]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const dur = isSawedOff ? 0.58 : 0.44;
+
+    // Katman 1: Barut gürültü patlaması
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.createNoiseBuffer(ctx, dur);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(isSawedOff ? 1200 : 880, now);
+    filter.frequency.exponentialRampToValueAtTime(65, now + dur);
+    const nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(isSawedOff ? 0.52 : 0.42, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    noise.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ctx.destination);
+    noise.start(now);
+
+    // Katman 2: Göğüs kafesini titreten alt bas darbesi
+    const sub = ctx.createOscillator();
+    const sGain = ctx.createGain();
+    sub.type = "sawtooth";
+    sub.frequency.setValueAtTime(isSawedOff ? 165 : 135, now);
+    sub.frequency.exponentialRampToValueAtTime(26, now + dur);
+    sGain.gain.setValueAtTime(isSawedOff ? 0.45 : 0.36, now);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    sub.connect(sGain);
+    sGain.connect(ctx.destination);
+    sub.start(now);
+    sub.stop(now + dur + 0.02);
+
+    // Katman 3: İnce kulak çınlaması (Tinnitus / Ear Ringing)
+    const ring = ctx.createOscillator();
+    const rGain = ctx.createGain();
+    ring.type = "sine";
+    ring.frequency.setValueAtTime(3480, now + 0.08);
+    rGain.gain.setValueAtTime(0.001, now + 0.08);
+    rGain.gain.linearRampToValueAtTime(isSawedOff ? 0.085 : 0.055, now + 0.16);
+    rGain.gain.exponentialRampToValueAtTime(0.0008, now + 1.05);
+    ring.connect(rGain);
+    rGain.connect(ctx.destination);
+    ring.start(now + 0.08);
+    ring.stop(now + 1.08);
+  }
+
+  // Kuru Metalik Tetik Sesi (*KLİK!* — Boş Mermi)
+  public playDryClick(): void {
+    if (this.muted) return;
+    this.vibrate(14);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const snap = ctx.createOscillator();
+    const sGain = ctx.createGain();
+    snap.type = "triangle";
+    snap.frequency.setValueAtTime(2400, now);
+    snap.frequency.exponentialRampToValueAtTime(420, now + 0.022);
+    sGain.gain.setValueAtTime(0.28, now);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.026);
+    snap.connect(sGain);
+    sGain.connect(ctx.destination);
+    snap.start(now);
+    snap.stop(now + 0.03);
+
+    const body = ctx.createOscillator();
+    const bGain = ctx.createGain();
+    body.type = "square";
+    body.frequency.setValueAtTime(680, now + 0.008);
+    body.frequency.exponentialRampToValueAtTime(190, now + 0.035);
+    bGain.gain.setValueAtTime(0.14, now + 0.008);
+    bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.038);
+    body.connect(bGain);
+    bGain.connect(ctx.destination);
+    body.start(now + 0.008);
+    body.stop(now + 0.042);
+  }
+
+  // El Testeresi (Namlu Kesme Metal Gıcırtısı)
+  public playHandSaw(): void {
+    if (this.muted) return;
+    this.vibrate([25, 20, 30, 20, 35]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // 3 ileri-geri metal kesme darbesi
+    [0, 0.14, 0.28].forEach((off, idx) => {
+      const t = now + off;
+      const noise = ctx.createBufferSource();
+      noise.buffer = this.createNoiseBuffer(ctx, 0.11);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(2100 + idx * 250, t);
+      filter.Q.setValueAtTime(4.2, t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.25, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.105);
+      noise.connect(filter);
+      filter.connect(g);
+      g.connect(ctx.destination);
+      noise.start(t);
+
+      const screech = ctx.createOscillator();
+      const sg = ctx.createGain();
+      screech.type = "sawtooth";
+      screech.frequency.setValueAtTime(620 + idx * 90, t);
+      screech.frequency.linearRampToValueAtTime(980 + idx * 110, t + 0.095);
+      sg.gain.setValueAtTime(0.14, t);
+      sg.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+      screech.connect(sg);
+      sg.connect(ctx.destination);
+      screech.start(t);
+      screech.stop(t + 0.105);
+    });
+  }
+
+  // Kelepçe Şangırtısı (Metalik Ratchet Kilit Sesi)
+  public playHandcuffs(): void {
+    if (this.muted) return;
+    this.vibrate([15, 25, 15, 25]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    [0, 0.055, 0.11, 0.175].forEach((off, idx) => {
+      const t = now + off;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(1850 + idx * 210, t);
+      osc.frequency.exponentialRampToValueAtTime(920, t + 0.038);
+      g.gain.setValueAtTime(0.2, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.042);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.046);
+    });
+  }
+
+  // Defibrilatör Elektroşok / Şarj Kaybı veya Yükleme Vızıltısı
+  public playDefibShock(isHeal: boolean = false): void {
+    if (this.muted) return;
+    this.vibrate(isHeal ? [18, 30, 22] : [45, 25, 55]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    if (isHeal) {
+      // Kapasitör şarj yükselişi
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(280, now);
+      osc.frequency.exponentialRampToValueAtTime(1120, now + 0.24);
+      g.gain.setValueAtTime(0.16, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.27);
+    } else {
+      // Elektrik ark çarpması
+      const zap = ctx.createOscillator();
+      const zg = ctx.createGain();
+      zap.type = "sawtooth";
+      zap.frequency.setValueAtTime(140, now);
+      zap.frequency.linearRampToValueAtTime(65, now + 0.22);
+      zg.gain.setValueAtTime(0.28, now);
+      zg.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+      zap.connect(zg);
+      zg.connect(ctx.destination);
+      zap.start(now);
+      zap.stop(now + 0.25);
+    }
+  }
+
+  // Adrenalin Kalp Atışı Bası (*LUB-DUB*)
+  public playHeartbeat(): void {
+    if (this.muted) return;
+    this.vibrate([22, 60, 16]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    [
+      { off: 0, freq: 78, vol: 0.34 },
+      { off: 0.14, freq: 64, vol: 0.24 },
+    ].forEach((b) => {
+      const t = now + b.off;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(b.freq, t);
+      osc.frequency.exponentialRampToValueAtTime(34, t + 0.11);
+      g.gain.setValueAtTime(b.vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.13);
+    });
+  }
+
+  // Teneke İçecek Açma & Mermi Tahliye (*PSSST-KLİK*)
+  public playSodaEject(): void {
+    if (this.muted) return;
+    this.vibrate([12, 20]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const hiss = ctx.createBufferSource();
+    hiss.buffer = this.createNoiseBuffer(ctx, 0.12);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.setValueAtTime(2600, now);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.22, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+    hiss.connect(filter);
+    filter.connect(g);
+    g.connect(ctx.destination);
+    hiss.start(now);
+
+    setTimeout(() => {
+      this.playShotgunRack();
+    }, 110);
+  }
+
+  // CRT Monitör / Gizli Telefon / Voltmetre Bip Sesi
+  public playCrtBeep(freq: number = 960): void {
+    if (this.muted) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(freq, now);
+    g.gain.setValueAtTime(0.08, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.065);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.07);
+  }
+
+  // Altıpatlar (Revolver) Silindir Döndürme Sesi (Blöf Ruleti)
+  public playRevolverSpin(): void {
+    if (this.muted) return;
+    this.vibrate([8, 18, 8, 18, 8, 22]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const clicks = [0, 0.038, 0.08, 0.128, 0.185, 0.25, 0.325];
+    clicks.forEach((off, i) => {
+      const t = now + off;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(1450 - i * 65, t);
+      osc.frequency.exponentialRampToValueAtTime(520, t + 0.018);
+      g.gain.setValueAtTime(0.18, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.022);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.025);
+    });
+  }
+
+  // Yüksek Gerilim Kablo Kesme (*ÇIT* veya Kısa Devre Patlaması)
+  public playWireCut(status: "safe" | "overload" | "explosion" = "safe"): void {
+    if (this.muted) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Yan keski metal *ÇIT* sesi
+    const snip = ctx.createOscillator();
+    const sGain = ctx.createGain();
+    snip.type = "triangle";
+    snip.frequency.setValueAtTime(2600, now);
+    snip.frequency.exponentialRampToValueAtTime(620, now + 0.025);
+    sGain.gain.setValueAtTime(0.24, now);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+    snip.connect(sGain);
+    sGain.connect(ctx.destination);
+    snip.start(now);
+    snip.stop(now + 0.032);
+
+    if (status === "explosion") {
+      this.playShotgunBlast(false);
+    } else if (status === "overload") {
+      this.playDefibShock(false);
+    } else {
+      this.vibrate(12);
+    }
+  }
 }
 
 export const sound = new ArcadeSoundEngine();

@@ -149,6 +149,10 @@ export default function PlayerDetailModal({
         bestT !== null ? ` • En hızlı ${bestT} sn` : ""
       }`;
     }
+    if (key === "buckshot" || key === "wireRoulette") {
+      const st = p.games?.[key];
+      return `${st?.wins ?? 0} zafer • ${st?.gamesPlayed ?? 0} düello`;
+    }
     if (isSmartboardMultiplayerGame(key)) {
       const st = p.games?.[key];
       return `${st?.wins ?? 0} şampiyonluk • ${st?.gamesPlayed ?? 0} maç`;
@@ -223,7 +227,7 @@ export default function PlayerDetailModal({
             <div className="my-4 flex items-center justify-between rounded-2xl border border-amber-400/35 bg-gradient-to-r from-amber-500/20 via-indigo-500/10 to-fuchsia-600/15 px-4 py-3">
               <div>
                 <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-300">
-                  <Trophy className="h-4 w-4" /> Genel Toplam Rekor (10 Oyun)
+                  <Trophy className="h-4 w-4" /> Genel Toplam Rekor (13 Oyun)
                 </div>
                 <div className="mt-0.5 text-3xl font-black text-white tabular-nums">
                   {(livePlayer.overallBestScore ?? 0).toLocaleString("tr-TR")}{" "}

@@ -30,6 +30,9 @@ const SPRING_TAB = {
 
 const TABS: { key: LeaderboardTabKey; label: string; icon: string }[] = [
   { key: "overall", label: "Genel Toplam", icon: "🏆" },
+  { key: "buckshot", label: "Buckshot Roulette", icon: "🔫" },
+  { key: "liarsRoulette", label: "Blöf Ruleti", icon: "💀" },
+  { key: "wireRoulette", label: "Yüksek Gerilim", icon: "⚡" },
   { key: "blockBlast", label: "Block Blast", icon: "🧱" },
   { key: "chess", label: "Satranç", icon: "♟️" },
   { key: "billiards", label: "Bilardo", icon: "🎱" },
@@ -85,6 +88,10 @@ export default function LeaderboardHub({
     if (tab === "sudoku") {
       const st = p.games?.sudoku;
       return `${st?.wins ?? 0} Çözüm • ${st?.gamesPlayed ?? 0} oyun`;
+    }
+    if (tab === "buckshot" || tab === "wireRoulette") {
+      const st = p.games?.[tab];
+      return `${st?.wins ?? 0} Zafer • ${st?.gamesPlayed ?? 0} düello`;
     }
     if (isSmartboardMultiplayerGame(tab)) {
       const st = p.games?.[tab];
