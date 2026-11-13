@@ -14,11 +14,11 @@ export interface Buckshot3DStateSnapshot {
   p2Items: (BuckshotItemKey | null)[];
   p1Cuffed: boolean;
   p2Cuffed: boolean;
-  revealShells: ShellType[] | null; // Doluysa kameralar mermi tepsisine yakın çekim yapar
+  revealShells: ShellType[] | null;
   gunAim: "neutral" | "p1" | "p2";
   gunPickedUpBy: 1 | 2 | null;
   adrenalineStealSeat: 1 | 2 | null;
-  currentChamberShell?: ShellType | null; // Tahliye penceresinde (Ejection Port) görünecek fişek
+  currentChamberShell?: ShellType | null;
 }
 
 export interface RaycastHitResult {
@@ -79,61 +79,116 @@ const ITEM_3D_LABELS: Record<BuckshotItemKey, string> = {
 };
 
 // ============================================================================
-// PROSEDÜREL KİRLİ / RETRO PS1 DOKULAR (THREE.CanvasTexture)
+// PROSEDÜREL RENK (MAP), KABARTMA (BUMPMAP) VE PÜRÜZLÜLÜK (ROUGHNESSMAP) DOKULARI
 // ============================================================================
 
-function createFeltTableTexture(): THREE.CanvasTexture {
+function createFeltTableTextures(): {
+  map: THREE.CanvasTexture;
+  bumpMap: THREE.CanvasTexture;
+  roughnessMap: THREE.CanvasTexture;
+} {
   const canvas = document.createElement("canvas");
   canvas.width = 1024;
   canvas.height = 1024;
   const ctx = canvas.getContext("2d")!;
 
-  // Koyulaşmış, aşınmış yeraltı yeşil çuha zemin
-  ctx.fillStyle = "#13281c";
+  const bumpCanvas = document.createElement("canvas");
+  bumpCanvas.width = 512;
+  bumpCanvas.height = 512;
+  const bCtx = bumpCanvas.getContext("2d")!;
+
+  // 1. Eskitilmiş koyu yeşil yeraltı çuha zemini
+  ctx.fillStyle = "#102318";
   ctx.fillRect(0, 0, 1024, 1024);
 
-  // Radyal kirli gölgeleme
-  const grad = ctx.createRadialGradient(512, 512, 90, 512, 512, 680);
-  grad.addColorStop(0, "rgba(38, 86, 55, 0.5)");
-  grad.addColorStop(0.65, "rgba(15, 35, 24, 0.58)");
-  grad.addColorStop(1, "rgba(5, 10, 7, 0.92)");
+  bCtx.fillStyle = "#808080";
+  bCtx.fillRect(0, 0, 512, 512);
+
+  // Radyal kirli chiaroscuro gölgeleme (kenarlar çok koyu)
+  const grad = ctx.createRadialGradient(512, 512, 80, 512, 512, 660);
+  grad.addColorStop(0, "rgba(38, 86, 56, 0.55)");
+  grad.addColorStop(0.58, "rgba(14, 33, 22, 0.65)");
+  grad.addColorStop(1, "rgba(3, 6, 4, 0.96)");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 1024, 1024);
 
-  // Prosedürel gürültü (grunge / leke / aşınma)
-  for (let i = 0; i < 22000; i++) {
+  // Çuha dokuma lifleri ve aşınma gürültüsü
+  for (let i = 0; i < 26000; i++) {
     const x = Math.random() * 1024;
     const y = Math.random() * 1024;
-    const dark = Math.random() < 0.58;
+    const dark = Math.random() < 0.6;
     ctx.fillStyle = dark
-      ? `rgba(4, 9, 6, ${Math.random() * 0.28})`
-      : `rgba(68, 128, 86, ${Math.random() * 0.15})`;
+      ? `rgba(2, 6, 4, ${Math.random() * 0.34})`
+      : `rgba(64, 124, 82, ${Math.random() * 0.14})`;
     ctx.fillRect(x, y, 2 + Math.random() * 3, 2 + Math.random() * 3);
+
+    if (i < 14000) {
+      const bx = Math.random() * 512;
+      const by = Math.random() * 512;
+      const bVal = 95 + Math.floor(Math.random() * 65);
+      bCtx.fillStyle = `rgb(${bVal},${bVal},${bVal})`;
+      bCtx.fillRect(bx, by, 2, 2);
+    }
   }
 
-  // Koyu yağ ve barut lekeleri
-  for (let s = 0; s < 26; s++) {
-    const sx = 120 + Math.random() * 780;
-    const sy = 120 + Math.random() * 780;
-    const r = 18 + Math.random() * 55;
+  // Yağ, kan/pas ve barut lekeleri
+  for (let s = 0; s < 34; s++) {
+    const sx = 100 + Math.random() * 824;
+    const sy = 100 + Math.random() * 824;
+    const r = 20 + Math.random() * 65;
     const sg = ctx.createRadialGradient(sx, sy, 2, sx, sy, r);
-    sg.addColorStop(0, "rgba(6, 10, 7, 0.42)");
-    sg.addColorStop(1, "rgba(6, 10, 7, 0)");
+    sg.addColorStop(0, "rgba(4, 7, 5, 0.55)");
+    sg.addColorStop(1, "rgba(4, 7, 5, 0)");
     ctx.fillStyle = sg;
     ctx.beginPath();
     ctx.arc(sx, sy, r, 0, Math.PI * 2);
     ctx.fill();
+
+    // Yağ lekeleri daha pürüzsüz/parlak (roughnessMap'te daha koyu)
+    const bg = bCtx.createRadialGradient(
+      sx * 0.5,
+      sy * 0.5,
+      1,
+      sx * 0.5,
+      sy * 0.5,
+      r * 0.5
+    );
+    bg.addColorStop(0, "rgba(50, 50, 50, 0.65)");
+    bg.addColorStop(1, "rgba(128, 128, 128, 0)");
+    bCtx.fillStyle = bg;
+    bCtx.beginPath();
+    bCtx.arc(sx * 0.5, sy * 0.5, r * 0.5, 0, Math.PI * 2);
+    bCtx.fill();
   }
 
-  // Tebeşir / Aşınmış Beyaz Boya Çizgileri
-  ctx.strokeStyle = "rgba(226, 232, 220, 0.72)";
-  ctx.lineWidth = 4;
+  // Bıçak / testere çizikleri
+  ctx.strokeStyle = "rgba(5, 10, 7, 0.65)";
+  bCtx.strokeStyle = "rgba(40, 40, 40, 0.8)";
+  for (let c = 0; c < 18; c++) {
+    const x1 = 140 + Math.random() * 740;
+    const y1 = 140 + Math.random() * 740;
+    const x2 = x1 + (Math.random() - 0.5) * 90;
+    const y2 = y1 + (Math.random() - 0.5) * 90;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
 
-  // Dış çerçeve çizgisi
+    bCtx.lineWidth = 1.5;
+    bCtx.beginPath();
+    bCtx.moveTo(x1 * 0.5, y1 * 0.5);
+    bCtx.lineTo(x2 * 0.5, y2 * 0.5);
+    bCtx.stroke();
+  }
+
+  // Yer yer silinmiş tebeşir beyazı masa çizgileri
+  ctx.strokeStyle = "rgba(218, 226, 212, 0.62)";
+  ctx.lineWidth = 4;
   ctx.strokeRect(42, 42, 940, 940);
 
   // Orta Tüfek Dikdörtgeni ve Nişangah Çizgileri
-  ctx.strokeStyle = "rgba(235, 240, 230, 0.78)";
+  ctx.strokeStyle = "rgba(228, 235, 222, 0.72)";
   ctx.lineWidth = 3.5;
   ctx.strokeRect(262, 430, 500, 164);
 
@@ -141,19 +196,19 @@ function createFeltTableTexture(): THREE.CanvasTexture {
   ctx.moveTo(230, 512);
   ctx.lineTo(794, 512);
   ctx.moveTo(512, 405);
-  ctx.lineTo(512, 619);
+  ctx.moveTo(512, 619);
   ctx.stroke();
 
-  // Sol Kenar: 8'li Mermi Dizilim Kutucukları (Mermi Tepsisi Yeri)
-  ctx.strokeStyle = "rgba(245, 158, 11, 0.7)";
+  // Sol Kenar: 8'li Mermi Dizilim Kutucukları
+  ctx.strokeStyle = "rgba(245, 158, 11, 0.65)";
   ctx.strokeRect(68, 360, 145, 304);
   for (let m = 0; m < 8; m++) {
     const my = 374 + m * 35;
     ctx.strokeRect(84, my, 112, 26);
   }
 
-  // Oyuncu 1 (+Z / Alt Yarı) ve Oyuncu 2 (-Z / Üst Yarı) için 8'li Eşya Kutucukları
-  ctx.strokeStyle = "rgba(236, 242, 232, 0.85)";
+  // Oyuncu 1 (+Z) ve Oyuncu 2 (-Z) için 8'li Eşya Kutucukları
+  ctx.strokeStyle = "rgba(232, 238, 226, 0.8)";
   ctx.lineWidth = 4;
 
   const drawPlayerItemGrid = (isP1Bottom: boolean) => {
@@ -176,30 +231,52 @@ function createFeltTableTexture(): THREE.CanvasTexture {
 
     allCoords.forEach((pt, idx) => {
       ctx.strokeRect(pt.x, pt.y, boxSize, boxSize);
-      ctx.fillStyle = "rgba(232, 238, 228, 0.28)";
+      // Tebeşir aşınma darbeleri
+      ctx.fillStyle = "rgba(16, 35, 24, 0.45)";
+      ctx.fillRect(pt.x + 28, pt.y - 2, 16, 5);
+      ctx.fillStyle = "rgba(232, 238, 228, 0.25)";
       ctx.font = "bold 18px monospace";
       ctx.fillText(`${idx + 1}`, pt.x + 8, pt.y + 22);
     });
   };
 
-  drawPlayerItemGrid(false); // Oyuncu 2 (-Z)
-  drawPlayerItemGrid(true); // Oyuncu 1 (+Z)
+  drawPlayerItemGrid(false);
+  drawPlayerItemGrid(true);
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
+  const map = new THREE.CanvasTexture(canvas);
+  map.magFilter = THREE.NearestFilter;
+  map.minFilter = THREE.NearestFilter;
+  map.needsUpdate = true;
+
+  const bumpMap = new THREE.CanvasTexture(bumpCanvas);
+  bumpMap.magFilter = THREE.LinearFilter;
+  bumpMap.minFilter = THREE.LinearFilter;
+  bumpMap.needsUpdate = true;
+
+  return { map, bumpMap, roughnessMap: bumpMap };
 }
 
-function createGrungeBrickTexture(): THREE.CanvasTexture {
+function createGrungeBrickTextures(): {
+  map: THREE.CanvasTexture;
+  bumpMap: THREE.CanvasTexture;
+  roughnessMap: THREE.CanvasTexture;
+} {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 512;
   const ctx = canvas.getContext("2d")!;
 
-  ctx.fillStyle = "#180d0b";
+  const bumpCanvas = document.createElement("canvas");
+  bumpCanvas.width = 512;
+  bumpCanvas.height = 512;
+  const bCtx = bumpCanvas.getContext("2d")!;
+
+  // Derz araları koyu ve içeri gömülü (bumpMap'te siyah)
+  ctx.fillStyle = "#090505";
   ctx.fillRect(0, 0, 512, 512);
+
+  bCtx.fillStyle = "#181818";
+  bCtx.fillRect(0, 0, 512, 512);
 
   const rows = 16;
   const cols = 8;
@@ -211,111 +288,178 @@ function createGrungeBrickTexture(): THREE.CanvasTexture {
     for (let c = -1; c <= cols; c++) {
       const x = c * brickW + offset;
       const y = r * brickH;
-      const shade = 24 + Math.floor(Math.random() * 24);
-      const red = shade + 18 + Math.floor(Math.random() * 16);
-      ctx.fillStyle = `rgb(${red}, ${shade}, ${shade - 4})`;
-      ctx.fillRect(x + 2, y + 2, brickW - 4, brickH - 4);
+      const shade = 18 + Math.floor(Math.random() * 20);
+      const red = shade + 14 + Math.floor(Math.random() * 16);
+      ctx.fillStyle = `rgb(${red}, ${shade}, ${shade - 3})`;
+      ctx.fillRect(x + 3, y + 3, brickW - 6, brickH - 6);
+
+      const bHeight = 145 + Math.floor(Math.random() * 75);
+      bCtx.fillStyle = `rgb(${bHeight}, ${bHeight}, ${bHeight})`;
+      bCtx.fillRect(x + 3, y + 3, brickW - 6, brickH - 6);
     }
   }
 
-  for (let i = 0; i < 6500; i++) {
+  // Tavandan aşağı doğru süzülen rutubet ve is lekeleri
+  for (let s = 0; s < 24; s++) {
+    const sx = Math.random() * 512;
+    const sw = 12 + Math.random() * 28;
+    const sh = 140 + Math.random() * 340;
+    const streakGrad = ctx.createLinearGradient(sx, 0, sx, sh);
+    streakGrad.addColorStop(0, "rgba(2, 2, 2, 0.78)");
+    streakGrad.addColorStop(0.6, "rgba(8, 12, 9, 0.42)");
+    streakGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = streakGrad;
+    ctx.fillRect(sx, 0, sw, sh);
+  }
+
+  // Tuğla pürüzleri
+  for (let i = 0; i < 8000; i++) {
+    const rx = Math.random() * 512;
+    const ry = Math.random() * 512;
     ctx.fillStyle =
-      Math.random() < 0.7 ? "rgba(0,0,0,0.35)" : "rgba(90,45,30,0.18)";
-    ctx.fillRect(Math.random() * 512, Math.random() * 512, 3, 3);
+      Math.random() < 0.72 ? "rgba(0,0,0,0.38)" : "rgba(85,40,28,0.16)";
+    ctx.fillRect(rx, ry, 3, 3);
+
+    const bv = Math.random() < 0.5 ? 60 : 210;
+    bCtx.fillStyle = `rgba(${bv},${bv},${bv},0.28)`;
+    bCtx.fillRect(rx, ry, 3, 3);
   }
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(3, 2);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(3, 2);
+  map.magFilter = THREE.NearestFilter;
+  map.minFilter = THREE.NearestFilter;
+  map.needsUpdate = true;
+
+  const bumpMap = new THREE.CanvasTexture(bumpCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.repeat.set(3, 2);
+  bumpMap.needsUpdate = true;
+
+  return { map, bumpMap, roughnessMap: bumpMap };
 }
 
-function createRustyMetalTexture(): THREE.CanvasTexture {
+function createRustyMetalTextures(): {
+  map: THREE.CanvasTexture;
+  bumpMap: THREE.CanvasTexture;
+} {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = 512;
+  canvas.height = 512;
   const ctx = canvas.getContext("2d")!;
 
-  ctx.fillStyle = "#1f1b18";
-  ctx.fillRect(0, 0, 256, 256);
+  const bumpCanvas = document.createElement("canvas");
+  bumpCanvas.width = 512;
+  bumpCanvas.height = 512;
+  const bCtx = bumpCanvas.getContext("2d")!;
 
-  for (let i = 0; i < 5000; i++) {
-    const rust = Math.random() < 0.32;
+  ctx.fillStyle = "#181514";
+  ctx.fillRect(0, 0, 512, 512);
+
+  bCtx.fillStyle = "#707070";
+  bCtx.fillRect(0, 0, 512, 512);
+
+  for (let i = 0; i < 9000; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 512;
+    const w = 2 + Math.random() * 8;
+    const rust = Math.random() < 0.36;
     ctx.fillStyle = rust
-      ? `rgba(120, 53, 18, ${Math.random() * 0.35})`
-      : `rgba(55, 60, 68, ${Math.random() * 0.25})`;
-    ctx.fillRect(
-      Math.random() * 256,
-      Math.random() * 256,
-      2 + Math.random() * 4,
-      2
-    );
+      ? `rgba(115, 48, 16, ${Math.random() * 0.38})`
+      : `rgba(52, 58, 66, ${Math.random() * 0.26})`;
+    ctx.fillRect(x, y, w, 2);
+
+    const bv = rust ? 185 : 95;
+    bCtx.fillStyle = `rgba(${bv},${bv},${bv},0.35)`;
+    bCtx.fillRect(x, y, w, 2);
   }
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.magFilter = THREE.NearestFilter;
+  map.minFilter = THREE.NearestFilter;
+  map.needsUpdate = true;
+
+  const bumpMap = new THREE.CanvasTexture(bumpCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.needsUpdate = true;
+
+  return { map, bumpMap };
 }
 
-function createWalnutWoodTexture(): THREE.CanvasTexture {
+function createWalnutWoodTextures(): {
+  map: THREE.CanvasTexture;
+  bumpMap: THREE.CanvasTexture;
+} {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = 512;
+  canvas.height = 512;
   const ctx = canvas.getContext("2d")!;
 
-  ctx.fillStyle = "#4a220d";
-  ctx.fillRect(0, 0, 256, 256);
+  const bumpCanvas = document.createElement("canvas");
+  bumpCanvas.width = 512;
+  bumpCanvas.height = 512;
+  const bCtx = bumpCanvas.getContext("2d")!;
 
-  // Koyu ceviz ağacı damarları
-  for (let y = 0; y < 256; y += 2) {
-    const wave = Math.sin(y * 0.08) * 12;
+  ctx.fillStyle = "#421d0a";
+  ctx.fillRect(0, 0, 512, 512);
+
+  bCtx.fillStyle = "#888888";
+  bCtx.fillRect(0, 0, 512, 512);
+
+  for (let y = 0; y < 512; y += 2) {
+    const wave = Math.sin(y * 0.05) * 16;
     ctx.strokeStyle =
-      y % 6 === 0 ? "rgba(28, 11, 4, 0.55)" : "rgba(92, 46, 18, 0.35)";
-    ctx.lineWidth = 1.5;
+      y % 6 === 0 ? "rgba(22, 8, 3, 0.62)" : "rgba(92, 44, 16, 0.38)";
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.bezierCurveTo(85, y + wave, 170, y - wave, 256, y);
+    ctx.bezierCurveTo(170, y + wave, 340, y - wave, 512, y);
     ctx.stroke();
+
+    bCtx.strokeStyle = y % 6 === 0 ? "#484848" : "#b8b8b8";
+    bCtx.lineWidth = 1.4;
+    bCtx.beginPath();
+    bCtx.moveTo(0, y);
+    bCtx.bezierCurveTo(170, y + wave, 340, y - wave, 512, y);
+    bCtx.stroke();
   }
 
-  for (let i = 0; i < 1800; i++) {
-    ctx.fillStyle =
-      Math.random() < 0.5 ? "rgba(18, 7, 2, 0.22)" : "rgba(120, 62, 24, 0.16)";
-    ctx.fillRect(Math.random() * 256, Math.random() * 256, 6, 1.5);
-  }
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.magFilter = THREE.NearestFilter;
+  map.minFilter = THREE.NearestFilter;
+  map.needsUpdate = true;
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
+  const bumpMap = new THREE.CanvasTexture(bumpCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.needsUpdate = true;
+
+  return { map, bumpMap };
 }
 
 function createBrushedSteelTexture(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = 512;
+  canvas.height = 512;
   const ctx = canvas.getContext("2d")!;
 
-  ctx.fillStyle = "#26313f";
-  ctx.fillRect(0, 0, 256, 256);
+  ctx.fillStyle = "#222c38";
+  ctx.fillRect(0, 0, 512, 512);
 
-  for (let i = 0; i < 3200; i++) {
+  for (let i = 0; i < 5000; i++) {
     const bright = Math.random() < 0.45;
     ctx.fillStyle = bright
-      ? `rgba(148, 163, 184, ${Math.random() * 0.16})`
-      : `rgba(15, 23, 42, ${Math.random() * 0.28})`;
-    ctx.fillRect(Math.random() * 256, Math.random() * 256, 14, 1.2);
+      ? `rgba(148, 163, 184, ${Math.random() * 0.18})`
+      : `rgba(12, 18, 28, ${Math.random() * 0.32})`;
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, 18, 1.2);
   }
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -336,7 +480,6 @@ function createCrackedPorcelainTexture(): THREE.CanvasTexture {
   ctx.fillStyle = "#dfd9ce";
   ctx.fillRect(0, 0, 256, 256);
 
-  // Kirli eskitme lekeleri
   for (let i = 0; i < 3000; i++) {
     ctx.fillStyle =
       Math.random() < 0.65
@@ -345,7 +488,6 @@ function createCrackedPorcelainTexture(): THREE.CanvasTexture {
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 3, 3);
   }
 
-  // Keskin siyah/kahverengi porselen çatlakları
   ctx.strokeStyle = "#1c1917";
   ctx.lineWidth = 2.2;
   const cracks = [
@@ -393,7 +535,6 @@ function createBandageTexture(): THREE.CanvasTexture {
   ctx.fillStyle = "#cbc3b4";
   ctx.fillRect(0, 0, 128, 128);
 
-  // Sargı bezi şerit çizgileri
   ctx.strokeStyle = "rgba(75, 65, 54, 0.45)";
   ctx.lineWidth = 2;
   for (let y = 0; y < 128; y += 14) {
@@ -403,7 +544,6 @@ function createBandageTexture(): THREE.CanvasTexture {
     ctx.stroke();
   }
 
-  // Kir / pas lekeleri
   for (let i = 0; i < 600; i++) {
     ctx.fillStyle =
       Math.random() < 0.25
@@ -433,7 +573,6 @@ function createChalkLabelTexture(
 
   ctx.clearRect(0, 0, 256, 64);
 
-  // Koyu yarı-saydam diegetic masa etiketi tabanı
   ctx.fillStyle = stealMode
     ? "rgba(68, 10, 24, 0.88)"
     : active
@@ -500,7 +639,7 @@ function createTargetBadgeTexture(
 }
 
 // ============================================================================
-// 9 FİZİKSEL 3D EŞYA MODELİ ÜRETİCİSİ (%25+ BÜYÜTÜLMÜŞ & NET AYDINLATMALI)
+// 9 YÜKSEK DETAYLI FİZİKSEL 3D EŞYA MODELİ (%28 BÜYÜTÜLMÜŞ)
 // ============================================================================
 
 function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
@@ -508,19 +647,19 @@ function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
 
   switch (itemKey) {
     case "soda": {
-      // 1. Teneke İçecek Kutusu (Silindir 3D Kutu + Gümüş Kapak + Açma Halkası)
-      const bodyGeo = new THREE.CylinderGeometry(0.165, 0.165, 0.45, 14);
+      // 1. Teneke İçecek Kutusu (Yıpranmış Metal Etiket + Gümüş Kapak + Açma Halkası Pull-Tab)
+      const bodyGeo = new THREE.CylinderGeometry(0.165, 0.165, 0.45, 16);
       const bodyMat = new THREE.MeshStandardMaterial({
         color: 0x0284c7,
-        roughness: 0.3,
-        metalness: 0.65,
+        roughness: 0.28,
+        metalness: 0.72,
       });
       const body = new THREE.Mesh(bodyGeo, bodyMat);
       body.position.y = 0.225;
       body.castShadow = true;
       group.add(body);
 
-      const stripeGeo = new THREE.CylinderGeometry(0.169, 0.169, 0.15, 14);
+      const stripeGeo = new THREE.CylinderGeometry(0.169, 0.169, 0.16, 16);
       const stripeMat = new THREE.MeshStandardMaterial({
         color: 0xe11d48,
         roughness: 0.35,
@@ -529,105 +668,148 @@ function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       stripe.position.y = 0.24;
       group.add(stripe);
 
-      const topGeo = new THREE.CylinderGeometry(0.15, 0.16, 0.035, 14);
-      const topMat = new THREE.MeshStandardMaterial({
+      const silverMat = new THREE.MeshStandardMaterial({
         color: 0xe2e8f0,
-        metalness: 0.9,
-        roughness: 0.18,
+        metalness: 0.92,
+        roughness: 0.16,
       });
-      const top = new THREE.Mesh(topGeo, topMat);
+      const top = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.162, 0.035, 16),
+        silverMat
+      );
       top.position.y = 0.455;
       group.add(top);
+
+      // Metal Açma Halkası (Pull-tab ring)
+      const pullTab = new THREE.Mesh(
+        new THREE.TorusGeometry(0.038, 0.008, 6, 12),
+        silverMat
+      );
+      pullTab.rotation.x = Math.PI / 2;
+      pullTab.position.set(0.02, 0.478, 0);
+      group.add(pullTab);
       break;
     }
 
     case "handcuffs": {
-      // 2. Metal Kelepçe (Çift Çelik Halka + Kilit Gövdesi + Zincir Baklaları)
+      // 2. Metal Kelepçe (Çift Dişli Çelik Halka + Kilit Kutusu + Gerçek Zincir Halkaları)
       const metalMat = new THREE.MeshStandardMaterial({
         color: 0xcbd5e1,
-        metalness: 0.88,
-        roughness: 0.22,
+        metalness: 0.9,
+        roughness: 0.2,
       });
-      const cuffGeo = new THREE.TorusGeometry(0.145, 0.03, 10, 20);
+      const cuffGeo = new THREE.TorusGeometry(0.145, 0.028, 10, 20);
 
       const leftCuff = new THREE.Mesh(cuffGeo, metalMat);
       leftCuff.rotation.x = Math.PI / 2;
-      leftCuff.position.set(-0.16, 0.05, 0);
+      leftCuff.position.set(-0.17, 0.05, 0);
       leftCuff.castShadow = true;
       group.add(leftCuff);
 
       const rightCuff = new THREE.Mesh(cuffGeo, metalMat);
       rightCuff.rotation.x = Math.PI / 2;
-      rightCuff.position.set(0.16, 0.05, 0);
+      rightCuff.position.set(0.17, 0.05, 0);
       rightCuff.castShadow = true;
       group.add(rightCuff);
 
-      const linkGeo = new THREE.BoxGeometry(0.14, 0.035, 0.05);
-      const link = new THREE.Mesh(linkGeo, metalMat);
-      link.position.set(0, 0.05, 0);
-      group.add(link);
+      // Kilit mekanizması blokları ve 3 halkalı metal zincir
+      [-0.06, 0, 0.06].forEach((cx, idx) => {
+        const chainLink = new THREE.Mesh(
+          new THREE.TorusGeometry(0.036, 0.009, 6, 12),
+          metalMat
+        );
+        chainLink.rotation.x = idx % 2 === 0 ? Math.PI / 2 : 0.35;
+        chainLink.position.set(cx, 0.05, 0);
+        group.add(chainLink);
+      });
       break;
     }
 
     case "handsaw": {
-      // 3. Katlanır El Testeresi (Ergonomik Ahşap Sap + Dişli Çelik Bıçak)
-      const handleGeo = new THREE.BoxGeometry(0.16, 0.1, 0.3);
+      // 3. El Testeresi (Vidalı Ahşap Kabza + Parlak Çelik Bıçak + Tek Tek Modellenmiş Testere Dişleri)
       const handleMat = new THREE.MeshStandardMaterial({
-        color: 0x9a3412,
-        roughness: 0.6,
+        color: 0x7c2d12,
+        roughness: 0.58,
       });
-      const handle = new THREE.Mesh(handleGeo, handleMat);
+      const handle = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 0.1, 0.3),
+        handleMat
+      );
       handle.position.set(-0.13, 0.07, 0.05);
       handle.rotation.y = 0.25;
       handle.castShadow = true;
       group.add(handle);
 
-      const bladeGeo = new THREE.BoxGeometry(0.38, 0.022, 0.1);
-      const bladeMat = new THREE.MeshStandardMaterial({
+      const steelMat = new THREE.MeshStandardMaterial({
         color: 0xe2e8f0,
-        metalness: 0.92,
-        roughness: 0.18,
+        metalness: 0.94,
+        roughness: 0.16,
       });
-      const blade = new THREE.Mesh(bladeGeo, bladeMat);
+      // Kabza vidaları
+      [-0.04, 0.04].forEach((vz) => {
+        const screw = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.018, 0.018, 0.11, 8),
+          steelMat
+        );
+        screw.position.set(-0.13, 0.07, 0.05 + vz);
+        group.add(screw);
+      });
+
+      const blade = new THREE.Mesh(
+        new THREE.BoxGeometry(0.38, 0.022, 0.095),
+        steelMat
+      );
       blade.position.set(0.12, 0.07, -0.02);
       blade.castShadow = true;
       group.add(blade);
+
+      // Testere dişleri
+      const toothGeo = new THREE.ConeGeometry(0.018, 0.032, 4);
+      for (let t = 0; t < 7; t++) {
+        const tooth = new THREE.Mesh(toothGeo, steelMat);
+        tooth.rotation.x = Math.PI / 2;
+        tooth.position.set(-0.02 + t * 0.048, 0.07, 0.038);
+        group.add(tooth);
+      }
       break;
     }
 
     case "magnifier": {
-      // 4. Büyüteç (Pirinç Çerçeve + Parlak Cam Mercek + Sap)
-      const rimGeo = new THREE.TorusGeometry(0.165, 0.028, 10, 20);
+      // 4. Büyüteç (Kalın Pirinç Çerçeve + Kırılmalı Yarı Saydam Cam Mercek + Sap)
       const rimMat = new THREE.MeshStandardMaterial({
         color: 0xf59e0b,
-        metalness: 0.85,
-        roughness: 0.25,
+        metalness: 0.88,
+        roughness: 0.22,
       });
-      const rim = new THREE.Mesh(rimGeo, rimMat);
+      const rim = new THREE.Mesh(
+        new THREE.TorusGeometry(0.165, 0.028, 10, 22),
+        rimMat
+      );
       rim.rotation.x = Math.PI / 2;
       rim.position.set(0, 0.07, -0.06);
       rim.castShadow = true;
       group.add(rim);
 
-      const lensGeo = new THREE.CylinderGeometry(0.155, 0.155, 0.02, 18);
       const lensMat = new THREE.MeshStandardMaterial({
-        color: 0x38bdf8,
+        color: 0x7dd3fc,
         emissive: 0x0284c7,
-        emissiveIntensity: 0.35,
+        emissiveIntensity: 0.38,
         transparent: true,
-        opacity: 0.62,
-        roughness: 0.1,
+        opacity: 0.65,
+        roughness: 0.08,
+        metalness: 0.2,
       });
-      const lens = new THREE.Mesh(lensGeo, lensMat);
+      const lens = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.155, 0.155, 0.024, 18),
+        lensMat
+      );
       lens.position.set(0, 0.07, -0.06);
       group.add(lens);
 
-      const stickGeo = new THREE.CylinderGeometry(0.03, 0.036, 0.24, 10);
-      const stickMat = new THREE.MeshStandardMaterial({
-        color: 0x292524,
-        roughness: 0.55,
-      });
-      const stick = new THREE.Mesh(stickGeo, stickMat);
+      const stick = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.038, 0.24, 10),
+        new THREE.MeshStandardMaterial({ color: 0x292524, roughness: 0.55 })
+      );
       stick.rotation.x = Math.PI / 2;
       stick.position.set(0, 0.07, 0.19);
       group.add(stick);
@@ -636,23 +818,22 @@ function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
 
     case "sedative": {
       // 5. Sigara Paketi / Şarj Tüpü (+1⚡ Yeşil Parlayan Kapsül)
-      const packGeo = new THREE.BoxGeometry(0.25, 0.35, 0.15);
-      const packMat = new THREE.MeshStandardMaterial({
-        color: 0x065f46,
-        roughness: 0.38,
-      });
-      const pack = new THREE.Mesh(packGeo, packMat);
+      const pack = new THREE.Mesh(
+        new THREE.BoxGeometry(0.25, 0.35, 0.15),
+        new THREE.MeshStandardMaterial({ color: 0x065f46, roughness: 0.38 })
+      );
       pack.position.y = 0.175;
       pack.castShadow = true;
       group.add(pack);
 
-      const coreGeo = new THREE.BoxGeometry(0.17, 0.17, 0.16);
-      const coreMat = new THREE.MeshStandardMaterial({
-        color: 0x10b981,
-        emissive: 0x10b981,
-        emissiveIntensity: 0.8,
-      });
-      const core = new THREE.Mesh(coreGeo, coreMat);
+      const core = new THREE.Mesh(
+        new THREE.BoxGeometry(0.17, 0.17, 0.16),
+        new THREE.MeshStandardMaterial({
+          color: 0x10b981,
+          emissive: 0x10b981,
+          emissiveIntensity: 0.85,
+        })
+      );
       core.position.y = 0.2;
       group.add(core);
       break;
@@ -660,13 +841,14 @@ function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
 
     case "inverter": {
       // 6. Dönüştürücü (Endüstriyel Kutu + Parlayan Mor Bobinler)
-      const boxGeo = new THREE.BoxGeometry(0.29, 0.21, 0.25);
-      const boxMat = new THREE.MeshStandardMaterial({
-        color: 0x312e81,
-        metalness: 0.65,
-        roughness: 0.35,
-      });
-      const box = new THREE.Mesh(boxGeo, boxMat);
+      const box = new THREE.Mesh(
+        new THREE.BoxGeometry(0.29, 0.21, 0.25),
+        new THREE.MeshStandardMaterial({
+          color: 0x312e81,
+          metalness: 0.68,
+          roughness: 0.32,
+        })
+      );
       box.position.y = 0.105;
       box.castShadow = true;
       group.add(box);
@@ -675,7 +857,7 @@ function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       const coilMat = new THREE.MeshStandardMaterial({
         color: 0xc084fc,
         emissive: 0x9333ea,
-        emissiveIntensity: 0.85,
+        emissiveIntensity: 0.9,
       });
       const c1 = new THREE.Mesh(coilGeo, coilMat);
       c1.position.set(-0.065, 0.25, 0);
@@ -687,98 +869,122 @@ function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
 
     case "burnerPhone": {
       // 7. Gizli Telefon (3D Tuşlu Retro Telefon + Parlak Kehribar Ekran + Anten)
-      const bodyGeo = new THREE.BoxGeometry(0.22, 0.075, 0.37);
       const bodyMat = new THREE.MeshStandardMaterial({
         color: 0x292524,
         roughness: 0.45,
       });
-      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(0.22, 0.075, 0.37),
+        bodyMat
+      );
       body.position.y = 0.04;
       body.castShadow = true;
       group.add(body);
 
-      const scrGeo = new THREE.BoxGeometry(0.16, 0.018, 0.13);
-      const scrMat = new THREE.MeshStandardMaterial({
-        color: 0xfbbf24,
-        emissive: 0xd97706,
-        emissiveIntensity: 0.85,
-      });
-      const scr = new THREE.Mesh(scrGeo, scrMat);
+      const scr = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 0.018, 0.13),
+        new THREE.MeshStandardMaterial({
+          color: 0xfbbf24,
+          emissive: 0xd97706,
+          emissiveIntensity: 0.9,
+        })
+      );
       scr.position.set(0, 0.08, -0.07);
       group.add(scr);
 
-      const antGeo = new THREE.CylinderGeometry(0.014, 0.014, 0.24, 8);
-      const ant = new THREE.Mesh(antGeo, bodyMat);
+      const ant = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.014, 0.014, 0.24, 8),
+        bodyMat
+      );
       ant.position.set(0.075, 0.15, -0.15);
       group.add(ant);
       break;
     }
 
     case "adrenaline": {
-      // 8. Adrenalin Şırıngası (3D Enjektör + Parlayan Kırmızı Sıvı + İğne)
-      const tubeGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.34, 12);
-      const tubeMat = new THREE.MeshStandardMaterial({
-        color: 0xfef2f2,
-        transparent: true,
-        opacity: 0.7,
-      });
-      const tube = new THREE.Mesh(tubeGeo, tubeMat);
+      // 8. Adrenalin Şırıngası (Saydam Tüp + Parlayan Kırmızı Sıvı + Piston Kolu + İğne Ucu)
+      const tube = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.062, 0.062, 0.34, 14),
+        new THREE.MeshStandardMaterial({
+          color: 0xfef2f2,
+          transparent: true,
+          opacity: 0.68,
+          roughness: 0.12,
+        })
+      );
       tube.rotation.z = Math.PI / 2;
-      tube.position.y = 0.09;
+      tube.position.y = 0.095;
       group.add(tube);
 
-      const liqGeo = new THREE.CylinderGeometry(0.046, 0.046, 0.22, 12);
-      const liqMat = new THREE.MeshStandardMaterial({
-        color: 0xef4444,
-        emissive: 0xdc2626,
-        emissiveIntensity: 0.9,
-      });
-      const liq = new THREE.Mesh(liqGeo, liqMat);
+      const liq = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.048, 0.048, 0.22, 12),
+        new THREE.MeshStandardMaterial({
+          color: 0xef4444,
+          emissive: 0xdc2626,
+          emissiveIntensity: 0.95,
+        })
+      );
       liq.rotation.z = Math.PI / 2;
-      liq.position.y = 0.09;
+      liq.position.y = 0.095;
       group.add(liq);
 
-      const needleGeo = new THREE.CylinderGeometry(0.01, 0.01, 0.17, 8);
-      const needleMat = new THREE.MeshStandardMaterial({
+      const metalMat = new THREE.MeshStandardMaterial({
         color: 0xe2e8f0,
         metalness: 0.92,
+        roughness: 0.2,
       });
-      const needle = new THREE.Mesh(needleGeo, needleMat);
+      const plunger = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018, 0.018, 0.16, 8),
+        metalMat
+      );
+      plunger.rotation.z = Math.PI / 2;
+      plunger.position.set(-0.22, 0.095, 0);
+      group.add(plunger);
+
+      const thumbRest = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.055, 0.055, 0.018, 10),
+        metalMat
+      );
+      thumbRest.rotation.z = Math.PI / 2;
+      thumbRest.position.set(-0.29, 0.095, 0);
+      group.add(thumbRest);
+
+      const needle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.008, 0.012, 0.18, 8),
+        metalMat
+      );
       needle.rotation.z = Math.PI / 2;
-      needle.position.set(0.23, 0.09, 0);
+      needle.position.set(0.24, 0.095, 0);
       group.add(needle);
       break;
     }
 
     case "expiredMed": {
       // 9. Bozuk İlaç Kutusu (Kehribar Hap Şişesi + Beyaz Kapak)
-      const botGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.31, 14);
-      const botMat = new THREE.MeshStandardMaterial({
-        color: 0xf59e0b,
-        emissive: 0xb45309,
-        emissiveIntensity: 0.25,
-        roughness: 0.28,
-      });
-      const bot = new THREE.Mesh(botGeo, botMat);
+      const bot = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14, 0.14, 0.31, 14),
+        new THREE.MeshStandardMaterial({
+          color: 0xf59e0b,
+          emissive: 0xb45309,
+          emissiveIntensity: 0.28,
+          roughness: 0.28,
+        })
+      );
       bot.position.y = 0.155;
       bot.castShadow = true;
       group.add(bot);
 
-      const capGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.075, 14);
-      const capMat = new THREE.MeshStandardMaterial({
-        color: 0xf8fafc,
-        roughness: 0.35,
-      });
-      const cap = new THREE.Mesh(capGeo, capMat);
+      const cap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.15, 0.075, 14),
+        new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35 })
+      );
       cap.position.y = 0.33;
       group.add(cap);
       break;
     }
   }
 
-  // Tüm 3D eşyaları %28 büyüt (Akıllı tahtada uzaktan bile net seçilsin)
   group.scale.setScalar(1.28);
-
   return group;
 }
 
@@ -806,33 +1012,32 @@ function buildSovietGasMaskHead(): THREE.Group {
   const head = new THREE.Group();
 
   const rubberMat = new THREE.MeshStandardMaterial({
-    color: 0x2c3329, // Koyu haki / kömür kauçuk
-    roughness: 0.62,
-    metalness: 0.12,
+    color: 0x282f25,
+    roughness: 0.58,
+    metalness: 0.14,
   });
   const darkMetalMat = new THREE.MeshStandardMaterial({
     color: 0x334155,
-    metalness: 0.85,
-    roughness: 0.28,
+    metalness: 0.88,
+    roughness: 0.26,
   });
   const lensMat = new THREE.MeshStandardMaterial({
-    color: 0xd97706,
-    emissive: 0x78350f,
-    emissiveIntensity: 0.55,
+    color: 0xf59e0b,
+    emissive: 0x92400e,
+    emissiveIntensity: 0.65,
     metalness: 0.9,
-    roughness: 0.1,
+    roughness: 0.08,
   });
   const hoseMat = new THREE.MeshStandardMaterial({
-    color: 0x141614,
+    color: 0x111311,
     roughness: 0.78,
   });
   const filterCanMat = new THREE.MeshStandardMaterial({
     color: 0x364935,
-    metalness: 0.65,
-    roughness: 0.42,
+    metalness: 0.68,
+    roughness: 0.4,
   });
 
-  // 1. Yuvarlak Hatlı GP-5 Kauçuk Başlık (Küre + Elmacık/Çene kubbesi)
   const cranium = new THREE.Mesh(
     new THREE.SphereGeometry(0.62, 20, 18),
     rubberMat
@@ -841,7 +1046,6 @@ function buildSovietGasMaskHead(): THREE.Group {
   cranium.castShadow = true;
   head.add(cranium);
 
-  // Alt yüz / çene kauçuk uzantısı
   const jawCone = new THREE.Mesh(
     new THREE.CylinderGeometry(0.46, 0.34, 0.55, 16),
     rubberMat
@@ -849,7 +1053,6 @@ function buildSovietGasMaskHead(): THREE.Group {
   jawCone.position.set(0, -0.32, 0.12);
   head.add(jawCone);
 
-  // 2. Dışa Çıkık Metal Çerçeveli İki Büyük Yuvarlak Cam Mercek
   [-0.24, 0.24].forEach((lx, i) => {
     const eyeGroup = new THREE.Group();
     eyeGroup.position.set(lx, 0.12, 0.52);
@@ -881,7 +1084,6 @@ function buildSovietGasMaskHead(): THREE.Group {
     head.add(eyeGroup);
   });
 
-  // 3. Burun-Ağız Metal Solunum Valfi Izgarası (Snout)
   const snout = new THREE.Mesh(
     new THREE.CylinderGeometry(0.18, 0.22, 0.34, 16),
     darkMetalMat
@@ -890,7 +1092,6 @@ function buildSovietGasMaskHead(): THREE.Group {
   snout.position.set(0, -0.26, 0.58);
   head.add(snout);
 
-  // Solunum ızgarası halkaları
   for (let r = -1; r <= 1; r++) {
     const slot = new THREE.Mesh(
       new THREE.BoxGeometry(0.22, 0.025, 0.04),
@@ -900,7 +1101,6 @@ function buildSovietGasMaskHead(): THREE.Group {
     head.add(slot);
   }
 
-  // 4. Kıvrımlı Siyah Solunum Hortumu (TubeGeometry)
   const hoseCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(0, -0.35, 0.68),
     new THREE.Vector3(0.12, -0.58, 0.66),
@@ -914,7 +1114,6 @@ function buildSovietGasMaskHead(): THREE.Group {
   hoseMesh.castShadow = true;
   head.add(hoseMesh);
 
-  // 5. Yana/Aşağı Sarkan Silindirik Metal Hava Filtresi Tüpü
   const filterCan = new THREE.Mesh(
     new THREE.CylinderGeometry(0.19, 0.19, 0.48, 16),
     filterCanMat
@@ -948,7 +1147,6 @@ function buildPorcelainNightmareHead(): THREE.Group {
   const darkVoidMat = new THREE.MeshBasicMaterial({ color: 0x040303 });
   const eeriePupilMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
 
-  // 1. Pürüzsüz Kavisli Oval Porselen Yüz (Küre + Elmacık & Çene)
   const faceDome = new THREE.Mesh(
     new THREE.SphereGeometry(0.6, 22, 20),
     porcelainMat
@@ -957,7 +1155,6 @@ function buildPorcelainNightmareHead(): THREE.Group {
   faceDome.castShadow = true;
   head.add(faceDome);
 
-  // Sivri elmacık kemikleri
   [-0.32, 0.32].forEach((cx) => {
     const cheek = new THREE.Mesh(
       new THREE.SphereGeometry(0.24, 14, 12),
@@ -968,7 +1165,6 @@ function buildPorcelainNightmareHead(): THREE.Group {
     head.add(cheek);
   });
 
-  // Kavisli burun sırtı
   const nose = new THREE.Mesh(
     new THREE.ConeGeometry(0.11, 0.36, 10),
     porcelainMat
@@ -977,7 +1173,6 @@ function buildPorcelainNightmareHead(): THREE.Group {
   nose.rotation.x = 0.22;
   head.add(nose);
 
-  // 2. Çukur Karanlık Göz Oyukları + Minik Soluk Işık Parıltısı
   [-0.22, 0.22].forEach((ex) => {
     const socket = new THREE.Mesh(
       new THREE.SphereGeometry(0.145, 14, 12),
@@ -995,7 +1190,6 @@ function buildPorcelainNightmareHead(): THREE.Group {
     head.add(pinLight);
   });
 
-  // 3. Geniş Karanlık Sırıtış + 3D Konik Sivri Dişler
   const grinCavity = new THREE.Mesh(
     new THREE.SphereGeometry(0.34, 16, 12),
     darkVoidMat
@@ -1013,7 +1207,6 @@ function buildPorcelainNightmareHead(): THREE.Group {
     const tx = Math.sin(angle) * 0.52;
     const tz = 0.44 + Math.cos(angle) * 0.08;
 
-    // Üst sivri diş
     const upperTooth = new THREE.Mesh(
       new THREE.ConeGeometry(0.032, 0.11, 8),
       toothMat
@@ -1022,7 +1215,6 @@ function buildPorcelainNightmareHead(): THREE.Group {
     upperTooth.position.set(tx, -0.24, tz);
     head.add(upperTooth);
 
-    // Alt sivri diş
     const lowerTooth = new THREE.Mesh(
       new THREE.ConeGeometry(0.028, 0.095, 8),
       toothMat
@@ -1054,7 +1246,6 @@ function buildDetailedHand(
     metalness: 0.3,
   });
 
-  // Yuvarlatılmış Avuç Gövdesi
   const palm = new THREE.Mesh(
     new THREE.SphereGeometry(0.24, 14, 12),
     mainMat
@@ -1063,7 +1254,6 @@ function buildDetailedHand(
   palm.castShadow = true;
   hGroup.add(palm);
 
-  // Taktik eklem koruyucu veya sargı şeridi
   const knuckleGuard = new THREE.Mesh(
     new THREE.BoxGeometry(0.38, 0.06, 0.12),
     accentMat
@@ -1071,7 +1261,6 @@ function buildDetailedHand(
   knuckleGuard.position.set(0, 0.08, 0.16);
   hGroup.add(knuckleGuard);
 
-  // Bilek / Manşet
   const wrist = new THREE.Mesh(
     new THREE.CylinderGeometry(0.17, 0.2, 0.34, 12),
     accentMat
@@ -1080,7 +1269,6 @@ function buildDetailedHand(
   wrist.position.set(0, 0.02, -0.32);
   hGroup.add(wrist);
 
-  // 4 Boğumlu Yuvarlak Parmak
   for (let f = 0; f < 4; f++) {
     const fingerGroup = new THREE.Group();
     fingerGroup.position.set(-0.15 + f * 0.1, -0.01, 0.22);
@@ -1105,7 +1293,6 @@ function buildDetailedHand(
     hGroup.add(fingerGroup);
   }
 
-  // Başparmak
   const thumb = new THREE.Mesh(
     new THREE.CylinderGeometry(0.042, 0.048, 0.24, 10),
     mainMat
@@ -1123,26 +1310,24 @@ function createAvatarRig(isP1AtPlusZ: boolean, layerIndex: 1 | 2): AvatarRig {
   const zSign = isP1AtPlusZ ? 1 : -1;
   root.position.set(0, 0, zSign * 4.18);
   if (isP1AtPlusZ) {
-    root.rotation.y = Math.PI; // +Z'deki oyuncu -Z'ye (masaya) bakar
+    root.rotation.y = Math.PI;
   }
 
-  const isGasMaskDefault = !isP1AtPlusZ; // -Z (Oyuncu 2): Gaz Maskeli Savaşçı, +Z (Oyuncu 1): Porselen Maskeli
+  const isGasMaskDefault = !isP1AtPlusZ;
 
-  // 1. Omuzlar ve Gövde (Ağır Dik Yakalı Palto veya Krupiye Yeleği)
   const torsoGroup = new THREE.Group();
   torsoGroup.position.set(0, 1.85, -0.15);
 
   const coatMat = new THREE.MeshStandardMaterial({
-    color: isGasMaskDefault ? 0x1f241d : 0x1c1917,
-    roughness: 0.82,
-    metalness: 0.1,
+    color: isGasMaskDefault ? 0x161a14 : 0x141210,
+    roughness: 0.84,
+    metalness: 0.12,
   });
   const collarMat = new THREE.MeshStandardMaterial({
-    color: isGasMaskDefault ? 0x2b3328 : 0x292524,
-    roughness: 0.75,
+    color: isGasMaskDefault ? 0x232a20 : 0x221e1c,
+    roughness: 0.76,
   });
 
-  // Göğüs ve Yuvarlak Omuzlar
   const chest = new THREE.Mesh(
     new THREE.CylinderGeometry(0.72, 0.88, 1.65, 16),
     coatMat
@@ -1151,7 +1336,6 @@ function createAvatarRig(isP1AtPlusZ: boolean, layerIndex: 1 | 2): AvatarRig {
   chest.castShadow = true;
   torsoGroup.add(chest);
 
-  // Dik Yaka / Omuz Apoletleri
   const collar = new THREE.Mesh(
     new THREE.CylinderGeometry(0.48, 0.58, 0.42, 16, 1, true),
     collarMat
@@ -1161,7 +1345,6 @@ function createAvatarRig(isP1AtPlusZ: boolean, layerIndex: 1 | 2): AvatarRig {
 
   root.add(torsoGroup);
 
-  // 2. Kafa / Maske Grubu
   const maskGroup = new THREE.Group();
   maskGroup.position.set(0, 2.98, 0.08);
 
@@ -1169,21 +1352,17 @@ function createAvatarRig(isP1AtPlusZ: boolean, layerIndex: 1 | 2): AvatarRig {
   let porcelainHeadGroup: THREE.Group | undefined;
 
   if (!isP1AtPlusZ) {
-    // -Z'deki karakter (Oyuncu 1'in karşısında gördüğü):
-    // 2 Kişilik Düelloda Sovyet Gaz Maskeli Savaşçı, Solo modda AI Krupiye veya Gaz Maskeli!
     gasMaskHeadGroup = buildSovietGasMaskHead();
     porcelainHeadGroup = buildPorcelainNightmareHead();
     porcelainHeadGroup.visible = false;
     maskGroup.add(gasMaskHeadGroup, porcelainHeadGroup);
   } else {
-    // +Z'deki karakter (Oyuncu 2'nin karşısında gördüğü): Çatlak Porselen Maskeli
     porcelainHeadGroup = buildPorcelainNightmareHead();
     maskGroup.add(porcelainHeadGroup);
   }
 
   root.add(maskGroup);
 
-  // 3. 3D Eldivenli Eller
   const handStyle = isGasMaskDefault ? "tactical_leather" : "bandaged_dealer";
   const leftHand = buildDetailedHand(-1, handStyle);
   const rightHand = buildDetailedHand(1, handStyle);
@@ -1193,7 +1372,6 @@ function createAvatarRig(isP1AtPlusZ: boolean, layerIndex: 1 | 2): AvatarRig {
   rightHand.position.copy(baseRightHandPos);
   root.add(leftHand, rightHand);
 
-  // 4. Bileklerde 3D Kelepçe Modeli
   const cuffsGroup = new THREE.Group();
   const steelMat = new THREE.MeshStandardMaterial({
     color: 0x94a3b8,
@@ -1215,7 +1393,6 @@ function createAvatarRig(isP1AtPlusZ: boolean, layerIndex: 1 | 2): AvatarRig {
   cuffsGroup.visible = false;
   root.add(cuffsGroup);
 
-  // 5. Tüfek Eldeyken Karşıdaki Rakip Maskesi Üzerinde Beliren 3D Kırmızı Hedef Nişangahı + Geniş Hitbox
   const targetReticleGroup = new THREE.Group();
   targetReticleGroup.position.set(0, 2.55, 0.65);
 
@@ -1246,7 +1423,10 @@ function createAvatarRig(isP1AtPlusZ: boolean, layerIndex: 1 | 2): AvatarRig {
     transparent: true,
     depthTest: false,
   });
-  const badgePlane = new THREE.Mesh(new THREE.PlaneGeometry(1.85, 0.46), badgeMat);
+  const badgePlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.85, 0.46),
+    badgeMat
+  );
   badgePlane.position.set(0, -0.92, 0.15);
   badgePlane.renderOrder = 10;
   targetReticleGroup.add(badgePlane);
@@ -1254,7 +1434,6 @@ function createAvatarRig(isP1AtPlusZ: boolean, layerIndex: 1 | 2): AvatarRig {
   targetReticleGroup.visible = false;
   root.add(targetReticleGroup);
 
-  // Rakip Gövde + Maske Geniş Dokunma Kutusu (Tüfek eldeyken doğrudan rakibe dokunarak ateşleme!)
   const opponentHitBox = new THREE.Mesh(
     new THREE.BoxGeometry(2.3, 2.7, 1.8),
     new THREE.MeshBasicMaterial({ visible: false })
@@ -1311,9 +1490,13 @@ export class Buckshot3DEngine {
   private chamberShellMesh!: THREE.Mesh;
   private chamberShellMat!: THREE.MeshStandardMaterial;
 
-  private muzzleLight: THREE.PointLight;
-  private spot1: THREE.SpotLight;
-  private spot2: THREE.SpotLight;
+  // Sinematik Işıklandırma, God-Rays ve Uçuşan Tozlar
+  private mainSpot!: THREE.SpotLight;
+  private fillLight1!: THREE.PointLight;
+  private fillLight2!: THREE.PointLight;
+  private muzzleLight!: THREE.PointLight;
+  private dustPoints!: THREE.Points;
+  private warningLedMeshes: THREE.Mesh[] = [];
 
   private severedBarrelOnTable: THREE.Group;
   private fallingBarrelPiece: FallingBarrelPiece | null = null;
@@ -1329,12 +1512,10 @@ export class Buckshot3DEngine {
   private avatarP1: AvatarRig;
   private avatarP2: AvatarRig;
 
-  // Kendi Göğüs Bölgesi 3D "KENDİNE DOĞRULT & SIK" Nişangah Hedefleri
   private selfTargetP1!: THREE.Group;
   private selfTargetP2!: THREE.Group;
   private tableCancelHitBox!: THREE.Mesh;
 
-  // 8'li 3D Eşya Yuvaları
   private p1SlotPositions: THREE.Vector3[] = [];
   private p2SlotPositions: THREE.Vector3[] = [];
   private p1ItemMeshes: (THREE.Group | null)[] = Array(8).fill(null);
@@ -1343,12 +1524,10 @@ export class Buckshot3DEngine {
   private p2GlowPads: THREE.Mesh[] = [];
   private interactiveTargets: THREE.Object3D[] = [];
 
-  // Dinamik Parçacık ve Kovan Listeleri
   private ejectedShells: Ejected3DShell[] = [];
   private sparks: SparkParticle[] = [];
   private activeItemAnim: ActiveItemAnim | null = null;
 
-  // Kamera ve Karakter Sarsıntı / Geri Tepme Durumları
   private cam1Shake: number = 0;
   private cam2Shake: number = 0;
   private cam1Knockback: number = 0;
@@ -1392,92 +1571,49 @@ export class Buckshot3DEngine {
     this.raycaster = new THREE.Raycaster();
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x0b0706, 0.068);
+    // 1. Yoğun Karanlık Üstel Sis (Duvar köşeleri ve tavan derinlikleri zifiri karanlıkta kaybolur)
+    this.scene.fog = new THREE.FogExp2(0x050304, 0.095);
 
-    // Kamera 1 (Oyuncu 1: +Z ucunda oturur, -Z'ye bakar — Split-Screen için geniş FOV 74!)
     this.camP1 = new THREE.PerspectiveCamera(74, 1, 0.1, 45);
     this.camP1.layers.enable(0);
-    this.camP1.layers.enable(1); // Karşıdaki Oyuncu 2 (Gaz Maskeli) ve kendi hedeflerini görür
+    this.camP1.layers.enable(1);
 
-    // Kamera 2 (Oyuncu 2: -Z ucunda oturur, +Z'ye bakar — Split-Screen için geniş FOV 74!)
     this.camP2 = new THREE.PerspectiveCamera(74, 1, 0.1, 45);
     this.camP2.layers.enable(0);
-    this.camP2.layers.enable(2); // Karşıdaki Oyuncu 1 (Porselen Maskeli) ve kendi hedeflerini görür
+    this.camP2.layers.enable(2);
 
-    // Güçlendirilmiş Işıklandırma + Karakter Arka Rim Light Spotları
-    const ambient = new THREE.AmbientLight(0x4a2e20, 1.45);
-    this.scene.add(ambient);
+    // 2. Kısılmış Ortam Işığı + Ana Tungsten Spot + Kontur (Rim) Işıkları
+    this.setupCinematicLighting();
 
-    this.spot1 = new THREE.SpotLight(
-      0xffbe64,
-      26,
-      22,
-      Math.PI / 2.6,
-      0.5,
-      1.1
-    );
-    this.spot1.position.set(-1.2, 5.6, 0.5);
-    this.spot1.castShadow = true;
-    this.scene.add(this.spot1);
-    this.scene.add(this.spot1.target);
-
-    this.spot2 = new THREE.SpotLight(
-      0xffa94d,
-      24,
-      22,
-      Math.PI / 2.6,
-      0.5,
-      1.1
-    );
-    this.spot2.position.set(1.2, 5.6, -0.5);
-    this.spot2.castShadow = true;
-    this.scene.add(this.spot2);
-    this.scene.add(this.spot2.target);
-
-    // 2 Karakterin Üzerine Düşen Arka-Üst Rim Light (Maske ve omuz detaylarını parlatır)
-    const rimLightP2 = new THREE.PointLight(0xffb454, 10, 8);
-    rimLightP2.position.set(0, 4.1, -3.55);
-    this.scene.add(rimLightP2);
-
-    const rimLightP1 = new THREE.PointLight(0x93c5fd, 10, 8);
-    rimLightP1.position.set(0, 4.1, 3.55);
-    this.scene.add(rimLightP1);
-
-    this.muzzleLight = new THREE.PointLight(0xff7700, 0, 12);
-    this.muzzleLight.position.set(0, 1.4, 0);
-    this.scene.add(this.muzzleLight);
-
-    // Oda, Masa, Kablolar, Hoparlörler ve Monitörü İnşa Et
+    // 3. Oda, Masa, Her İki Cephede Zengin Endüstriyel Dekor, God-Rays ve Uçuşan Tozlar
     this.initSlotCoordinates();
     this.buildUndergroundRoom();
+    this.buildVolumetricGodRaysAndDust();
+
     this.shotgunGroup = this.build3DShotgun();
     this.scene.add(this.shotgunGroup);
 
-    // Kesilen namlu ucu (El testeresi kullanıldığında masada duran çift borulu parça)
     this.severedBarrelOnTable = this.buildSeveredBarrelPiece();
     this.severedBarrelOnTable.position.set(0.68, 0.99, 0.36);
     this.severedBarrelOnTable.rotation.y = 0.48;
     this.severedBarrelOnTable.visible = false;
     this.scene.add(this.severedBarrelOnTable);
 
-    // Sol Kenarda 8'li Mermi Dizilim Tepsisi
     this.shellTrayGroup = new THREE.Group();
     this.shellTrayGroup.position.set(-2.32, 0.98, 0);
     this.scene.add(this.shellTrayGroup);
 
-    // Karşıdaki Karakter Modelleri (Biri Gaz Maskeli, Diğeri Çatlak Porselen Maskeli!)
-    this.avatarP2 = createAvatarRig(false, 1); // -Z'de, Layer 1 (camP1 görür)
-    this.avatarP1 = createAvatarRig(true, 2); // +Z'de, Layer 2 (camP2 görür)
+    this.avatarP2 = createAvatarRig(false, 1);
+    this.avatarP1 = createAvatarRig(true, 2);
     this.scene.add(this.avatarP2.root);
     this.scene.add(this.avatarP1.root);
 
-    // Kendi Göğüs Bölgesinde Beliren "KENDİNE DOĞRULT & SIK" 3D Hedef Halkaları
     this.selfTargetP1 = this.buildSelfTargetReticle(1);
     this.selfTargetP2 = this.buildSelfTargetReticle(2);
     this.scene.add(this.selfTargetP1);
     this.scene.add(this.selfTargetP2);
 
-    // Güvenli WebGL Başlatma (StrictMode ve ContextLost Korumalı)
+    // Güvenli WebGL Başlatma + PCFSoftShadowMap + ACESFilmicToneMapping
     try {
       const gl = (this.canvas.getContext("webgl2", { antialias: false }) ||
         this.canvas.getContext("webgl", { antialias: false })) as
@@ -1497,9 +1633,17 @@ export class Buckshot3DEngine {
         antialias: false,
         powerPreference: "default",
       });
+      this.renderer.setPixelRatio(
+        Math.min(
+          typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
+          1.35
+        )
+      );
       this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.BasicShadowMap;
-      this.renderer.setClearColor(0x070504, 1);
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = 0.92;
+      this.renderer.setClearColor(0x050304, 1);
     } catch (err) {
       this.initError =
         err instanceof Error
@@ -1513,8 +1657,127 @@ export class Buckshot3DEngine {
     this.animate();
   }
 
+  private setupCinematicLighting(): void {
+    // Düşük ortam ışığı (Sahnenin düz ve aydınlık görünmesini engeller)
+    const ambient = new THREE.AmbientLight(0x120a08, 0.14);
+    this.scene.add(ambient);
+
+    // Masanın tam tepesinden sarkan ana tungsten SpotLight (1024x1024 PCFSoftShadowMap)
+    this.mainSpot = new THREE.SpotLight(
+      0xffb469,
+      46,
+      14,
+      Math.PI / 2.25,
+      0.82,
+      1.9
+    );
+    this.mainSpot.position.set(0, 5.15, 0);
+    this.mainSpot.castShadow = true;
+    this.mainSpot.shadow.mapSize.set(1024, 1024);
+    this.mainSpot.shadow.camera.near = 1.2;
+    this.mainSpot.shadow.camera.far = 10;
+    this.mainSpot.shadow.bias = -0.0005;
+    this.scene.add(this.mainSpot);
+    this.scene.add(this.mainSpot.target);
+
+    // Masadaki 3D eşya yuvalarını aydınlatan kısa menzilli sıcak dolgu ışıkları (Duvarlara ulaşmaz!)
+    this.fillLight1 = new THREE.PointLight(0xffa94d, 4.2, 5.2, 2.0);
+    this.fillLight1.position.set(0, 2.45, 1.55);
+    this.scene.add(this.fillLight1);
+
+    this.fillLight2 = new THREE.PointLight(0xffa94d, 4.2, 5.2, 2.0);
+    this.fillLight2.position.set(0, 2.45, -1.55);
+    this.scene.add(this.fillLight2);
+
+    // Karakterlerin Gaz Maskesi / Porselen Maskesi ve omuzlarına düşen soğuk-kızıl Kontur Işıkları (Rim Lights)
+    // (Menzili 4.5 birim olduğu için arka duvara patlamaz, karakterleri karanlığın içinden çıkarır!)
+    const rimConfigs = [
+      { pos: new THREE.Vector3(-1.85, 3.85, -3.55), col: 0xff5a36, int: 11 },
+      { pos: new THREE.Vector3(1.85, 3.85, -3.55), col: 0x60a5fa, int: 9 },
+      { pos: new THREE.Vector3(-1.85, 3.85, 3.55), col: 0x60a5fa, int: 9 },
+      { pos: new THREE.Vector3(1.85, 3.85, 3.55), col: 0xff5a36, int: 11 },
+    ];
+    rimConfigs.forEach((rc) => {
+      const rl = new THREE.PointLight(rc.col, rc.int, 4.4, 2.1);
+      rl.position.copy(rc.pos);
+      this.scene.add(rl);
+    });
+
+    this.muzzleLight = new THREE.PointLight(0xff7700, 0, 12);
+    this.muzzleLight.position.set(0, 1.4, 0);
+    this.scene.add(this.muzzleLight);
+  }
+
+  private buildVolumetricGodRaysAndDust(): void {
+    // 1. Tavan Lambasından ve 4 Sahne Spotundan İnen Hacimsel Işık Hüzmeleri (God-Rays)
+    const rayMat = new THREE.MeshBasicMaterial({
+      color: 0xffbe76,
+      transparent: true,
+      opacity: 0.045,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    const centerCone = new THREE.Mesh(
+      new THREE.ConeGeometry(3.35, 4.3, 24, 1, true),
+      rayMat
+    );
+    centerCone.position.set(0, 3.05, 0);
+    centerCone.matrixAutoUpdate = false;
+    centerCone.updateMatrix();
+    this.scene.add(centerCone);
+
+    const sideRayMat = new THREE.MeshBasicMaterial({
+      color: 0xff8a4c,
+      transparent: true,
+      opacity: 0.032,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const spotPositions = [
+      new THREE.Vector3(-2.35, 4.5, -3.2),
+      new THREE.Vector3(2.35, 4.5, -3.2),
+      new THREE.Vector3(-2.35, 4.5, 3.2),
+      new THREE.Vector3(2.35, 4.5, 3.2),
+    ];
+    spotPositions.forEach((sp) => {
+      const beam = new THREE.Mesh(
+        new THREE.ConeGeometry(1.15, 3.1, 14, 1, true),
+        sideRayMat
+      );
+      beam.position.set(sp.x * 0.72, 3.25, sp.z * 0.88);
+      beam.rotation.z = sp.x < 0 ? -0.35 : 0.35;
+      beam.matrixAutoUpdate = false;
+      beam.updateMatrix();
+      this.scene.add(beam);
+    });
+
+    // 2. Işığın İçinde Yavaşça Süzülen 60 Adet Mikro Toz Zerreciği (THREE.Points)
+    const dustCount = 60;
+    const positions = new Float32Array(dustCount * 3);
+    for (let i = 0; i < dustCount; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 6.2;
+      positions[i * 3 + 1] = 1.15 + Math.random() * 3.8;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 6.2;
+    }
+    const dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+    const dustMat = new THREE.PointsMaterial({
+      color: 0xffdfa8,
+      size: 0.045,
+      transparent: true,
+      opacity: 0.48,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.dustPoints = new THREE.Points(dustGeo, dustMat);
+    this.scene.add(this.dustPoints);
+  }
+
   private initSlotCoordinates(): void {
-    // 50/50 Split-Screen kadrajına kusursuz oturan 8'li eşya koordinatları
     const p1Rows = [1.4, 2.2];
     const colsLeft = [-1.72, -0.94];
     const colsRight = [0.94, 1.72];
@@ -1546,7 +1809,6 @@ export class Buckshot3DEngine {
   private buildSelfTargetReticle(ownerSeat: 1 | 2): THREE.Group {
     const group = new THREE.Group();
     const zSign = ownerSeat === 1 ? 1 : -1;
-    // Oyuncunun kendi yakın masa kenarı / göğüs hizası
     group.position.set(0, 1.24, zSign * 2.58);
     if (ownerSeat === 2) {
       group.rotation.y = Math.PI;
@@ -1576,13 +1838,15 @@ export class Buckshot3DEngine {
       transparent: true,
       depthTest: false,
     });
-    const badge = new THREE.Mesh(new THREE.PlaneGeometry(1.75, 0.44), badgeMat);
+    const badge = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.75, 0.44),
+      badgeMat
+    );
     badge.position.set(0, 0.24, 0);
     badge.rotation.x = -0.35;
     badge.renderOrder = 12;
     group.add(badge);
 
-    // Geniş Dokunma Hitbox'ı
     const hitBox = new THREE.Mesh(
       new THREE.BoxGeometry(1.9, 0.9, 1.05),
       new THREE.MeshBasicMaterial({ visible: false })
@@ -1601,194 +1865,575 @@ export class Buckshot3DEngine {
     return group;
   }
 
+  // ============================================================================
+  // ZENGİN ENDÜSTRİYEL YERALTI ODASI (HER İKİ KAMERA YÖNÜ İÇİN DOLU ARKA PLAN)
+  // ============================================================================
   private buildUndergroundRoom(): void {
-    const feltTex = createFeltTableTexture();
-    const brickTex = createGrungeBrickTexture();
-    const rustTex = createRustyMetalTexture();
+    const feltTex = createFeltTableTextures();
+    const brickTex = createGrungeBrickTextures();
+    const rustTex = createRustyMetalTextures();
 
-    // 1. Masa Üstü (Kirli Yeşil Çuha + Tebeşir Çizgileri)
+    // Ortak (Shared) Materyaller
+    const rustMetalMat = new THREE.MeshStandardMaterial({
+      map: rustTex.map,
+      bumpMap: rustTex.bumpMap,
+      bumpScale: 0.035,
+      metalness: 0.75,
+      roughness: 0.52,
+    });
+    const darkIronMat = new THREE.MeshStandardMaterial({
+      color: 0x16181b,
+      bumpMap: rustTex.bumpMap,
+      bumpScale: 0.025,
+      metalness: 0.82,
+      roughness: 0.46,
+    });
+    const pipeRustMat = new THREE.MeshStandardMaterial({
+      color: 0x3b2316,
+      bumpMap: rustTex.bumpMap,
+      bumpScale: 0.04,
+      metalness: 0.68,
+      roughness: 0.58,
+    });
+    const cableRubberMat = new THREE.MeshStandardMaterial({
+      color: 0x09090b,
+      roughness: 0.72,
+    });
+
+    // 1. MASA ÜSTÜ (Kabartmalı Kirli Yeşil Çuha + Perçinli Ağır Demir Çerçeve)
     const tableGeo = new THREE.BoxGeometry(6.2, 0.16, 6.2);
+    const feltSurfaceMat = new THREE.MeshStandardMaterial({
+      map: feltTex.map,
+      bumpMap: feltTex.bumpMap,
+      bumpScale: 0.025,
+      roughnessMap: feltTex.roughnessMap,
+      roughness: 0.88,
+      metalness: 0.05,
+    });
     const tableMaterials = [
-      new THREE.MeshStandardMaterial({ map: rustTex, roughness: 0.8 }),
-      new THREE.MeshStandardMaterial({ map: rustTex, roughness: 0.8 }),
-      new THREE.MeshStandardMaterial({
-        map: feltTex,
-        roughness: 0.86,
-        metalness: 0.05,
-      }),
-      new THREE.MeshStandardMaterial({ map: rustTex, roughness: 0.9 }),
-      new THREE.MeshStandardMaterial({ map: rustTex, roughness: 0.8 }),
-      new THREE.MeshStandardMaterial({ map: rustTex, roughness: 0.8 }),
+      rustMetalMat,
+      rustMetalMat,
+      feltSurfaceMat,
+      rustMetalMat,
+      rustMetalMat,
+      rustMetalMat,
     ];
     const tableMesh = new THREE.Mesh(tableGeo, tableMaterials);
     tableMesh.position.set(0, 0.88, 0);
     tableMesh.receiveShadow = true;
     tableMesh.userData = { hitType: "table_cancel" };
+    tableMesh.matrixAutoUpdate = false;
+    tableMesh.updateMatrix();
     this.tableCancelHitBox = tableMesh;
     this.scene.add(tableMesh);
 
-    // Masa Kenar Metal Bordürleri
-    const rimMat = new THREE.MeshStandardMaterial({
-      map: rustTex,
-      metalness: 0.7,
-      roughness: 0.55,
-    });
-    const rimFB = new THREE.BoxGeometry(6.44, 0.24, 0.18);
-    const rimNorth = new THREE.Mesh(rimFB, rimMat);
-    rimNorth.position.set(0, 0.91, -3.15);
-    const rimSouth = new THREE.Mesh(rimFB, rimMat);
-    rimSouth.position.set(0, 0.91, 3.15);
+    // Sabit arka plan objelerini tek grupta topla ve matrixAutoUpdate = false ile FPS koru
+    const staticDecor = new THREE.Group();
 
-    const rimLR = new THREE.BoxGeometry(0.18, 0.24, 6.44);
-    const rimWest = new THREE.Mesh(rimLR, rimMat);
-    rimWest.position.set(-3.15, 0.91, 0);
-    const rimEast = new THREE.Mesh(rimLR, rimMat);
-    rimEast.position.set(3.15, 0.91, 0);
-    this.scene.add(rimNorth, rimSouth, rimWest, rimEast);
+    // Masa Kenar Demir Bordürleri ve Metal Perçinler (Rivets)
+    const rimFB = new THREE.BoxGeometry(6.48, 0.24, 0.2);
+    const rimNorth = new THREE.Mesh(rimFB, rustMetalMat);
+    rimNorth.position.set(0, 0.91, -3.16);
+    const rimSouth = new THREE.Mesh(rimFB, rustMetalMat);
+    rimSouth.position.set(0, 0.91, 3.16);
 
-    // 2. Tuğla Oda Duvarları ve Zemin
-    const roomGeo = new THREE.BoxGeometry(16, 9, 16);
+    const rimLR = new THREE.BoxGeometry(0.2, 0.24, 6.48);
+    const rimWest = new THREE.Mesh(rimLR, rustMetalMat);
+    rimWest.position.set(-3.16, 0.91, 0);
+    const rimEast = new THREE.Mesh(rimLR, rustMetalMat);
+    rimEast.position.set(3.16, 0.91, 0);
+    staticDecor.add(rimNorth, rimSouth, rimWest, rimEast);
+
+    const rivetGeo = new THREE.CylinderGeometry(0.028, 0.028, 0.03, 8);
+    for (let r = -2.8; r <= 2.8; r += 0.7) {
+      [-3.16, 3.16].forEach((rz) => {
+        const rv = new THREE.Mesh(rivetGeo, darkIronMat);
+        rv.position.set(r, 1.035, rz);
+        staticDecor.add(rv);
+      });
+      [-3.16, 3.16].forEach((rx) => {
+        const rv = new THREE.Mesh(rivetGeo, darkIronMat);
+        rv.position.set(rx, 1.035, r);
+        staticDecor.add(rv);
+      });
+    }
+
+    // 2. KABARTMALI KİRLİ TUĞLA DUVARLAR VE ZEMİN (bumpScale: 0.06)
+    const roomGeo = new THREE.BoxGeometry(15.6, 8.8, 15.6);
     const roomMat = new THREE.MeshStandardMaterial({
-      map: brickTex,
-      side: THREE.BackSide,
+      map: brickTex.map,
+      bumpMap: brickTex.bumpMap,
+      bumpScale: 0.06,
+      roughnessMap: brickTex.roughnessMap,
       roughness: 0.92,
+      side: THREE.BackSide,
     });
     const roomMesh = new THREE.Mesh(roomGeo, roomMat);
     roomMesh.position.set(0, 3.8, 0);
-    this.scene.add(roomMesh);
+    staticDecor.add(roomMesh);
 
-    // 3. Tavanda Çelik Kirişler & Endüstriyel Sahne Spot Kapakları
-    const beamMat = new THREE.MeshStandardMaterial({
-      color: 0x18181b,
-      metalness: 0.8,
-      roughness: 0.5,
-    });
-    for (let z = -4; z <= 4; z += 4) {
-      const beam = new THREE.Mesh(
-        new THREE.BoxGeometry(15.5, 0.28, 0.32),
-        beamMat
+    // 3. TAVAN ÇELİK I-KİRİŞLER, OLUKLU SAC PANELLER VE SARKAN ANA TUNGSTEN LAMBA
+    for (let z = -6; z <= 6; z += 3) {
+      const iBeamWeb = new THREE.Mesh(
+        new THREE.BoxGeometry(15.2, 0.34, 0.14),
+        darkIronMat
       );
-      beam.position.set(0, 6.2, z);
-      this.scene.add(beam);
+      iBeamWeb.position.set(0, 6.25, z);
+      const iBeamFlange = new THREE.Mesh(
+        new THREE.BoxGeometry(15.2, 0.06, 0.36),
+        rustMetalMat
+      );
+      iBeamFlange.position.set(0, 6.08, z);
+      staticDecor.add(iBeamWeb, iBeamFlange);
     }
 
-    const hoodGeo = new THREE.ConeGeometry(0.42, 0.45, 10, 1, true);
-    const hoodMat = new THREE.MeshStandardMaterial({
-      color: 0x27272a,
-      metalness: 0.7,
-      roughness: 0.4,
-      side: THREE.DoubleSide,
-    });
-    [-1.1, 1.1].forEach((lx) => {
-      const hood = new THREE.Mesh(hoodGeo, hoodMat);
-      hood.position.set(lx, 5.45, 0);
-      this.scene.add(hood);
+    // Merkez tungsten tavan lambası şapkası
+    const centerHood = new THREE.Mesh(
+      new THREE.ConeGeometry(0.55, 0.48, 14, 1, true),
+      darkIronMat
+    );
+    centerHood.position.set(0, 5.28, 0);
+    const centerBulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.14, 10, 10),
+      new THREE.MeshBasicMaterial({ color: 0xffe4b5 })
+    );
+    centerBulb.position.set(0, 5.12, 0);
+    staticDecor.add(centerHood, centerBulb);
 
-      const bulb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.12, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0xffedd5 })
+    // 4. 4 KAPAKLI BÜYÜK SAHNE SPOTLARI (BARN-DOOR STAGE SPOTLIGHTS — Her iki cephede 2'şer adet!)
+    const buildBarnDoorSpotlight = (
+      pos: THREE.Vector3,
+      lookTarget: THREE.Vector3
+    ): THREE.Group => {
+      const spotGroup = new THREE.Group();
+      spotGroup.position.copy(pos);
+      spotGroup.lookAt(lookTarget);
+
+      // Tavan çelik askı çubuğu ve U-kelepçe
+      const yoke = new THREE.Mesh(
+        new THREE.BoxGeometry(0.56, 0.42, 0.08),
+        darkIronMat
       );
-      bulb.position.set(lx, 5.32, 0);
-      this.scene.add(bulb);
-    });
+      yoke.position.set(0, 0.22, -0.1);
+      spotGroup.add(yoke);
 
-    // 4. Tavandan Sarkan Siyah Endüstriyel Kablolar
-    const cableMat = new THREE.MeshStandardMaterial({
-      color: 0x09090b,
-      roughness: 0.7,
-    });
-    const cablePaths = [
+      // Silindirik soğutma kanallı metal gövde
+      const housing = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.24, 0.28, 0.68, 14),
+        darkIronMat
+      );
+      housing.rotation.x = Math.PI / 2;
+      spotGroup.add(housing);
+
+      // Soğutma halkaları (Cooling fins)
+      for (let f = -0.2; f <= 0.2; f += 0.1) {
+        const fin = new THREE.Mesh(
+          new THREE.TorusGeometry(0.26, 0.018, 6, 14),
+          rustMetalMat
+        );
+        fin.position.z = f;
+        spotGroup.add(fin);
+      }
+
+      // Buğulu cam mercek
+      const lens = new THREE.Mesh(
+        new THREE.CircleGeometry(0.22, 14),
+        new THREE.MeshBasicMaterial({ color: 0xffcc88 })
+      );
+      lens.position.z = 0.345;
+      spotGroup.add(lens);
+
+      // 4 Adet Açık Açılı Siyah Metal Işık Kapağı (Barn-Doors)
+      const flapGeo = new THREE.BoxGeometry(0.36, 0.02, 0.26);
+      const topFlap = new THREE.Mesh(flapGeo, darkIronMat);
+      topFlap.position.set(0, 0.25, 0.44);
+      topFlap.rotation.x = -0.45;
+
+      const botFlap = new THREE.Mesh(flapGeo, darkIronMat);
+      botFlap.position.set(0, -0.25, 0.44);
+      botFlap.rotation.x = 0.45;
+
+      const leftFlap = new THREE.Mesh(flapGeo, darkIronMat);
+      leftFlap.rotation.z = Math.PI / 2;
+      leftFlap.position.set(-0.25, 0, 0.44);
+      leftFlap.rotation.y = 0.45;
+
+      const rightFlap = new THREE.Mesh(flapGeo, darkIronMat);
+      rightFlap.rotation.z = Math.PI / 2;
+      rightFlap.position.set(0.25, 0, 0.44);
+      rightFlap.rotation.y = -0.45;
+
+      spotGroup.add(topFlap, botFlap, leftFlap, rightFlap);
+      return spotGroup;
+    };
+
+    // Kuzey (-Z) ve Güney (+Z) cephelerindeki 4 sahne spotu
+    staticDecor.add(
+      buildBarnDoorSpotlight(
+        new THREE.Vector3(-2.35, 4.85, -3.25),
+        new THREE.Vector3(0, 2.2, -3.9)
+      ),
+      buildBarnDoorSpotlight(
+        new THREE.Vector3(2.35, 4.85, -3.25),
+        new THREE.Vector3(0, 2.2, -3.9)
+      ),
+      buildBarnDoorSpotlight(
+        new THREE.Vector3(-2.35, 4.85, 3.25),
+        new THREE.Vector3(0, 2.2, 3.9)
+      ),
+      buildBarnDoorSpotlight(
+        new THREE.Vector3(2.35, 4.85, 3.25),
+        new THREE.Vector3(0, 2.2, 3.9)
+      )
+    );
+
+    // 5. TAVANDAN VE SPOTLARDAN SARKAN 12 ADET KALIN SİYAH ELEKTRİK KABLOSU (CatmullRomCurve3 + TubeGeometry)
+    const cableCurves: THREE.Vector3[][] = [
       [
-        new THREE.Vector3(-1.1, 6.2, 0),
-        new THREE.Vector3(-1.35, 5.7, 0.3),
-        new THREE.Vector3(-1.1, 5.45, 0),
+        new THREE.Vector3(0, 6.25, 0),
+        new THREE.Vector3(0.18, 5.7, 0.12),
+        new THREE.Vector3(0, 5.28, 0),
       ],
       [
-        new THREE.Vector3(1.1, 6.2, 0),
-        new THREE.Vector3(1.4, 5.75, -0.25),
-        new THREE.Vector3(1.1, 5.45, 0),
+        new THREE.Vector3(-2.35, 6.2, -3.25),
+        new THREE.Vector3(-2.7, 5.2, -3.5),
+        new THREE.Vector3(-2.35, 4.85, -3.25),
       ],
       [
-        new THREE.Vector3(2.8, 6.2, 1.2),
-        new THREE.Vector3(2.9, 3.6, 0.6),
-        new THREE.Vector3(2.45, 1.75, 0),
+        new THREE.Vector3(2.35, 6.2, -3.25),
+        new THREE.Vector3(2.7, 5.2, -3.5),
+        new THREE.Vector3(2.35, 4.85, -3.25),
       ],
       [
-        new THREE.Vector3(-3.8, 6.2, -3.5),
-        new THREE.Vector3(-4.2, 3.8, -4.1),
-        new THREE.Vector3(-4.8, 1.5, -4.5),
+        new THREE.Vector3(-2.35, 6.2, 3.25),
+        new THREE.Vector3(-2.7, 5.2, 3.5),
+        new THREE.Vector3(-2.35, 4.85, 3.25),
+      ],
+      [
+        new THREE.Vector3(2.35, 6.2, 3.25),
+        new THREE.Vector3(2.7, 5.2, 3.5),
+        new THREE.Vector3(2.35, 4.85, 3.25),
+      ],
+      [
+        new THREE.Vector3(2.46, 6.2, 0.8),
+        new THREE.Vector3(2.85, 3.6, 0.45),
+        new THREE.Vector3(2.46, 1.85, 0),
+      ],
+      [
+        new THREE.Vector3(-3.8, 6.2, -2.5),
+        new THREE.Vector3(-4.2, 4.1, -4.2),
+        new THREE.Vector3(-4.5, 2.4, -5.6),
+      ],
+      [
+        new THREE.Vector3(3.8, 6.2, -2.5),
+        new THREE.Vector3(4.2, 4.1, -4.2),
+        new THREE.Vector3(4.5, 2.4, -5.6),
+      ],
+      [
+        new THREE.Vector3(-3.8, 6.2, 2.5),
+        new THREE.Vector3(-4.2, 4.1, 4.2),
+        new THREE.Vector3(-4.5, 2.4, 5.6),
+      ],
+      [
+        new THREE.Vector3(3.8, 6.2, 2.5),
+        new THREE.Vector3(4.2, 4.1, 4.2),
+        new THREE.Vector3(4.5, 2.4, 5.6),
+      ],
+      [
+        new THREE.Vector3(-1.6, 6.2, -6.2),
+        new THREE.Vector3(0, 4.85, -6.5),
+        new THREE.Vector3(1.6, 6.2, -6.2),
+      ],
+      [
+        new THREE.Vector3(-1.6, 6.2, 6.2),
+        new THREE.Vector3(0, 4.85, 6.5),
+        new THREE.Vector3(1.6, 6.2, 6.2),
       ],
     ];
-    cablePaths.forEach((pts) => {
+    cableCurves.forEach((pts) => {
       const curve = new THREE.CatmullRomCurve3(pts);
-      const tubeGeo = new THREE.TubeGeometry(curve, 16, 0.035, 6, false);
-      const cable = new THREE.Mesh(tubeGeo, cableMat);
-      this.scene.add(cable);
+      const cableMesh = new THREE.Mesh(
+        new THREE.TubeGeometry(curve, 14, 0.036, 6, false),
+        cableRubberMat
+      );
+      staticDecor.add(cableMesh);
     });
 
-    // 5. Köşelerde Eski Kabin Hoparlörler
-    const speakerMat = new THREE.MeshStandardMaterial({
-      color: 0x141210,
-      roughness: 0.85,
-    });
-    const coneMat = new THREE.MeshStandardMaterial({
-      color: 0x292524,
-      roughness: 0.6,
-    });
-    const cornerCoords = [
-      new THREE.Vector3(-5.2, 1.8, -5.2),
-      new THREE.Vector3(5.2, 1.8, -5.2),
-      new THREE.Vector3(-5.2, 1.8, 5.2),
-      new THREE.Vector3(5.2, 1.8, 5.2),
-    ];
-    cornerCoords.forEach((pos) => {
-      const cab = new THREE.Mesh(
-        new THREE.BoxGeometry(1.4, 3.4, 1.2),
-        speakerMat
-      );
-      cab.position.copy(pos);
-      this.scene.add(cab);
+    // 6. HER İKİ KAMERA YÖNÜ (-Z VE +Z CEPHESİ) İÇİN ZENGİN ENDÜSTRİYEL ODA DEKORU
+    const buildEndWallSet = (zDir: -1 | 1) => {
+      const wallGroup = new THREE.Group();
+      if (zDir === 1) {
+        wallGroup.rotation.y = Math.PI;
+      }
 
-      const woofer = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.42, 0.25, 0.15, 12),
-        coneMat
+      // A) SOL ARKA KÖŞE: Üst Üste Kabin Hoparlörler + Amfi Katı (VU-Metre LED + Düğmeler) + Metal Raf & Bant Makaraları
+      const speakerCabinetMat = new THREE.MeshStandardMaterial({
+        color: 0x161311,
+        roughness: 0.85,
+      });
+      const speakerConeMat = new THREE.MeshStandardMaterial({
+        color: 0x262220,
+        roughness: 0.55,
+      });
+
+      // Alt büyük kabin
+      const lowerCab = new THREE.Mesh(
+        new THREE.BoxGeometry(1.45, 2.2, 1.15),
+        speakerCabinetMat
       );
-      woofer.rotation.x = Math.PI / 2;
-      woofer.position.set(
-        pos.x,
-        pos.y + 0.5,
-        pos.z > 0 ? pos.z - 0.62 : pos.z + 0.62
+      lowerCab.position.set(-3.85, 1.1, -5.85);
+      lowerCab.rotation.y = 0.28;
+      wallGroup.add(lowerCab);
+
+      // Çift yuvarlak woofer konisi
+      [0.65, 1.55].forEach((wy) => {
+        const wooferRing = new THREE.Mesh(
+          new THREE.TorusGeometry(0.34, 0.04, 8, 16),
+          darkIronMat
+        );
+        wooferRing.position.set(-3.68, wy, -5.28);
+        wooferRing.rotation.y = 0.28;
+        wallGroup.add(wooferRing);
+
+        const cone = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.32, 0.12, 0.14, 14),
+          speakerConeMat
+        );
+        cone.rotation.x = Math.PI / 2;
+        cone.rotation.z = -0.28;
+        cone.position.set(-3.7, wy, -5.32);
+        wallGroup.add(cone);
+      });
+
+      // Üst Amfi Katı (VU-metre LED ışıkları ve çevirme düğmeleri)
+      const ampHead = new THREE.Mesh(
+        new THREE.BoxGeometry(1.32, 0.62, 0.95),
+        darkIronMat
       );
-      this.scene.add(woofer);
+      ampHead.position.set(-3.85, 2.52, -5.85);
+      ampHead.rotation.y = 0.28;
+      wallGroup.add(ampHead);
+
+      const vuColors = [0x22c55e, 0x22c55e, 0xf59e0b, 0xef4444];
+      vuColors.forEach((vc, idx) => {
+        const vuLed = new THREE.Mesh(
+          new THREE.BoxGeometry(0.09, 0.08, 0.04),
+          new THREE.MeshBasicMaterial({ color: vc })
+        );
+        vuLed.position.set(-4.05 + idx * 0.14, 2.56, -5.36);
+        wallGroup.add(vuLed);
+      });
+
+      // Metal Raf + Karton Kutular & Manyetik Bant Makaraları
+      for (let sy = 0.8; sy <= 3.2; sy += 1.2) {
+        const shelf = new THREE.Mesh(
+          new THREE.BoxGeometry(1.5, 0.06, 0.75),
+          rustMetalMat
+        );
+        shelf.position.set(-2.15, sy, -6.35);
+        wallGroup.add(shelf);
+      }
+      [-2.85, -1.45].forEach((px) => {
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(0.07, 3.6, 0.07),
+          darkIronMat
+        );
+        post.position.set(px, 1.8, -6.02);
+        wallGroup.add(post);
+      });
+
+      const boxMat = new THREE.MeshStandardMaterial({
+        color: 0x5c4028,
+        roughness: 0.88,
+      });
+      const carton1 = new THREE.Mesh(
+        new THREE.BoxGeometry(0.58, 0.48, 0.52),
+        boxMat
+      );
+      carton1.position.set(-2.35, 2.28, -6.32);
+      carton1.rotation.y = 0.18;
+      wallGroup.add(carton1);
+
+      const tapeReel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.24, 0.24, 0.06, 14),
+        rustMetalMat
+      );
+      tapeReel.rotation.x = Math.PI / 2;
+      tapeReel.position.set(-1.75, 2.25, -6.25);
+      wallGroup.add(tapeReel);
+
+      // B) SAĞ ARKA KÖŞE: Endüstriyel Elektrik/Jeneratör Panosu + Kırmızı Basınçlı Gaz Tüpü + Eski Sandalye
+      const panelBox = new THREE.Mesh(
+        new THREE.BoxGeometry(1.35, 1.85, 0.42),
+        rustMetalMat
+      );
+      panelBox.position.set(2.45, 2.45, -6.45);
+      wallGroup.add(panelBox);
+
+      // Analog İbreli Kadranlar
+      [-0.3, 0.3].forEach((gx) => {
+        const dial = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.18, 0.05, 14),
+          new THREE.MeshBasicMaterial({ color: 0xd6d3d1 })
+        );
+        dial.rotation.x = Math.PI / 2;
+        dial.position.set(2.45 + gx, 2.85, -6.22);
+        wallGroup.add(dial);
+      });
+
+      // Yanıp sönen kırmızı uyarı LED'i
+      const warnLed = new THREE.Mesh(
+        new THREE.SphereGeometry(0.075, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xef4444 })
+      );
+      warnLed.position.set(2.45, 3.22, -6.2);
+      wallGroup.add(warnLed);
+      this.warningLedMeshes.push(warnLed);
+
+      // Vanalı Kırmızı Basınçlı Gaz Tüpü
+      const gasTankMat = new THREE.MeshStandardMaterial({
+        color: 0x991b1b,
+        metalness: 0.55,
+        roughness: 0.42,
+      });
+      const gasTank = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.28, 0.28, 1.85, 14),
+        gasTankMat
+      );
+      gasTank.position.set(3.65, 0.92, -5.85);
+      wallGroup.add(gasTank);
+
+      const gasDome = new THREE.Mesh(
+        new THREE.SphereGeometry(0.28, 14, 10),
+        gasTankMat
+      );
+      gasDome.position.set(3.65, 1.85, -5.85);
+      wallGroup.add(gasDome);
+
+      const valveWheel = new THREE.Mesh(
+        new THREE.TorusGeometry(0.11, 0.02, 6, 12),
+        rustMetalMat
+      );
+      valveWheel.rotation.x = Math.PI / 2;
+      valveWheel.position.set(3.65, 2.22, -5.85);
+      wallGroup.add(valveWheel);
+
+      // Gölgede Duran Eski Metal/Ahşap Sandalye Silüeti
+      const chairGroup = new THREE.Group();
+      chairGroup.position.set(1.55, 0, -5.25);
+      chairGroup.rotation.y = -0.42;
+      const seatMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.68, 0.07, 0.68),
+        boxMat
+      );
+      seatMesh.position.y = 0.78;
+      const backMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.68, 0.85, 0.07),
+        boxMat
+      );
+      backMesh.position.set(0, 1.22, -0.31);
+      chairGroup.add(seatMesh, backMesh);
+      wallGroup.add(chairGroup);
+
+      // C) TUĞLA DUVARLAR BOYUNCA PASLI BUHAR BORULARI, HAVALANDIRMA IZGARASI VE ZİNCİRLER
+      const hPipe1 = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.095, 0.095, 12.5, 10),
+        pipeRustMat
+      );
+      hPipe1.rotation.z = Math.PI / 2;
+      hPipe1.position.set(0, 4.35, -6.65);
+
+      const hPipe2 = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.065, 0.065, 12.5, 10),
+        rustMetalMat
+      );
+      hPipe2.rotation.z = Math.PI / 2;
+      hPipe2.position.set(0, 3.95, -6.68);
+      wallGroup.add(hPipe1, hPipe2);
+
+      // Havalandırma Izgarası (Vent Grille)
+      const ventFrame = new THREE.Mesh(
+        new THREE.BoxGeometry(1.25, 0.75, 0.12),
+        darkIronMat
+      );
+      ventFrame.position.set(-0.65, 3.35, -6.72);
+      wallGroup.add(ventFrame);
+
+      return wallGroup;
+    };
+
+    staticDecor.add(buildEndWallSet(-1));
+    staticDecor.add(buildEndWallSet(1));
+
+    // Yan duvarlarda (-X ve +X) boydan boya uzanan çelik borular
+    [-6.8, 6.8].forEach((wx) => {
+      const sidePipe = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.09, 0.09, 14.5, 10),
+        pipeRustMat
+      );
+      sidePipe.rotation.x = Math.PI / 2;
+      sidePipe.position.set(wx, 3.65, 0);
+      staticDecor.add(sidePipe);
     });
 
-    // 6. Masanın Sağ Kenarında (+X) 3D Defibrilatör / Şarj Monitörü (Yeşil LED Çubuklu)
+    // Tüm sabit dekor objelerinde matrixAutoUpdate = false uygulayarak akıllı tahtada 60 FPS hızı koru
+    staticDecor.traverse((obj) => {
+      const m = obj as THREE.Mesh;
+      if (m.isMesh) {
+        m.castShadow = false;
+        m.receiveShadow = true;
+      }
+      obj.updateMatrix();
+      obj.matrixAutoUpdate = false;
+    });
+    this.scene.add(staticDecor);
+
+    // 7. MASANIN YANINDAKİ 3D DEFİBRİLATÖR & YÜKSEK GERİLİM ŞARJ ÜNİTESİ
     const monGroup = new THREE.Group();
     monGroup.position.set(2.46, 1.42, 0);
 
     const casing = new THREE.Mesh(
-      new THREE.BoxGeometry(0.58, 0.9, 1.32),
-      new THREE.MeshStandardMaterial({
-        map: rustTex,
-        metalness: 0.65,
-        roughness: 0.45,
-      })
+      new THREE.BoxGeometry(0.6, 0.94, 1.38),
+      rustMetalMat
     );
     casing.castShadow = true;
     monGroup.add(casing);
 
+    // Üst yüksek gerilim bakır bobinleri / izolatörleri ve metal şalterler
+    const copperMat = new THREE.MeshStandardMaterial({
+      color: 0xd97706,
+      metalness: 0.85,
+      roughness: 0.25,
+    });
+    [-0.38, 0.38].forEach((cz) => {
+      const coil = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.11, 0.13, 0.32, 12),
+        copperMat
+      );
+      coil.position.set(0, 0.62, cz);
+      monGroup.add(coil);
+
+      const switchLever = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 0.04, 0.04),
+        darkIronMat
+      );
+      switchLever.position.set(-0.32, 0.32, cz);
+      switchLever.rotation.z = 0.4;
+      monGroup.add(switchLever);
+    });
+
     const screenPlane = new THREE.Mesh(
-      new THREE.BoxGeometry(0.62, 0.72, 1.12),
-      new THREE.MeshBasicMaterial({ color: 0x050a07 })
+      new THREE.BoxGeometry(0.64, 0.74, 1.14),
+      new THREE.MeshBasicMaterial({ color: 0x040806 })
     );
     monGroup.add(screenPlane);
 
     for (let i = 0; i < 5; i++) {
-      const ledGeo = new THREE.BoxGeometry(0.66, 0.085, 0.4);
+      const ledGeo = new THREE.BoxGeometry(0.68, 0.085, 0.4);
       const p1Mat = new THREE.MeshStandardMaterial({
         color: 0x22c55e,
         emissive: 0x22c55e,
-        emissiveIntensity: 0.9,
+        emissiveIntensity: 1.15,
       });
       const p1Led = new THREE.Mesh(ledGeo, p1Mat);
       p1Led.position.set(0, -0.24 + i * 0.12, 0.28);
@@ -1798,7 +2443,7 @@ export class Buckshot3DEngine {
       const p2Mat = new THREE.MeshStandardMaterial({
         color: 0x22c55e,
         emissive: 0x22c55e,
-        emissiveIntensity: 0.9,
+        emissiveIntensity: 1.15,
       });
       const p2Led = new THREE.Mesh(ledGeo, p2Mat);
       p2Led.position.set(0, -0.24 + i * 0.12, -0.28);
@@ -1810,7 +2455,7 @@ export class Buckshot3DEngine {
       new THREE.SphereGeometry(0.14, 8, 8),
       new THREE.MeshBasicMaterial({ color: 0xef4444 })
     );
-    this.cutWireSparkMesh.position.set(0, 0.55, 0);
+    this.cutWireSparkMesh.position.set(0, 0.58, 0);
     this.cutWireSparkMesh.visible = false;
     monGroup.add(this.cutWireSparkMesh);
 
@@ -1818,19 +2463,21 @@ export class Buckshot3DEngine {
   }
 
   // ============================================================================
-  // YÜKSEK DETAYLI 3D POMPALI TÜFEK (REMINGTON 870 / MOSSBERG STİLİ)
+  // YÜKSEK DETAYLI 3D POMPALI TÜFEK (REMINGTON 870 / MOSSBERG STİLİ + BUMPMAP)
   // ============================================================================
   private build3DShotgun(): THREE.Group {
     const gun = new THREE.Group();
     gun.position.set(0, 1.07, 0);
 
-    const walnutTex = createWalnutWoodTexture();
+    const walnutTex = createWalnutWoodTextures();
     const steelTex = createBrushedSteelTexture();
 
     const woodMat = new THREE.MeshStandardMaterial({
-      map: walnutTex,
+      map: walnutTex.map,
+      bumpMap: walnutTex.bumpMap,
+      bumpScale: 0.022,
       color: 0x6b3410,
-      roughness: 0.52,
+      roughness: 0.48,
       metalness: 0.08,
     });
     const rubberPadMat = new THREE.MeshStandardMaterial({
@@ -1839,15 +2486,19 @@ export class Buckshot3DEngine {
     });
     const brushedSteelMat = new THREE.MeshStandardMaterial({
       map: steelTex,
+      bumpMap: steelTex,
+      bumpScale: 0.012,
       color: 0x3b4859,
-      metalness: 0.86,
-      roughness: 0.28,
+      metalness: 0.88,
+      roughness: 0.26,
     });
     const darkBarrelSteelMat = new THREE.MeshStandardMaterial({
       map: steelTex,
+      bumpMap: steelTex,
+      bumpScale: 0.012,
       color: 0x1e293b,
-      metalness: 0.9,
-      roughness: 0.26,
+      metalness: 0.92,
+      roughness: 0.24,
     });
     const chromeBoltMat = new THREE.MeshStandardMaterial({
       color: 0xcbd5e1,
@@ -1860,15 +2511,14 @@ export class Buckshot3DEngine {
       roughness: 0.18,
     });
 
-    // 1. CEVİZ AĞACI ERGONOMİK DİPÇİK (ExtrudeGeometry ile gerçek tüfek dipçiği kesiti)
     const stockShape = new THREE.Shape();
-    stockShape.moveTo(-0.34, 0.04); // Gövde bağlantısı üst
-    stockShape.lineTo(-0.52, -0.02); // Kabza (Pistol grip) üst kavis
-    stockShape.quadraticCurveTo(-0.66, -0.02, -1.16, -0.08); // Üst yanak (Comb)
-    stockShape.lineTo(-1.18, -0.34); // Dipçik arkası (Butt heel -> toe)
-    stockShape.lineTo(-0.66, -0.22); // Alt kenar
-    stockShape.quadraticCurveTo(-0.52, -0.24, -0.44, -0.14); // Kabza alt çıkıntısı
-    stockShape.lineTo(-0.34, -0.08); // Gövde bağlantısı alt
+    stockShape.moveTo(-0.34, 0.04);
+    stockShape.lineTo(-0.52, -0.02);
+    stockShape.quadraticCurveTo(-0.66, -0.02, -1.16, -0.08);
+    stockShape.lineTo(-1.18, -0.34);
+    stockShape.lineTo(-0.66, -0.22);
+    stockShape.quadraticCurveTo(-0.52, -0.24, -0.44, -0.14);
+    stockShape.lineTo(-0.34, -0.08);
     stockShape.closePath();
 
     const stockGeo = new THREE.ExtrudeGeometry(stockShape, {
@@ -1878,7 +2528,6 @@ export class Buckshot3DEngine {
       bevelSize: 0.022,
       bevelSegments: 3,
     });
-    // Extrude X-Y düzlemindedir; Y=yukarı, Z=uzunluk olacak şekilde döndür
     stockGeo.rotateY(Math.PI / 2);
     stockGeo.center();
 
@@ -1887,7 +2536,6 @@ export class Buckshot3DEngine {
     stockMesh.castShadow = true;
     gun.add(stockMesh);
 
-    // Siyah Kauçuk Dipçik Pedi (Recoil Pad)
     const recoilPad = new THREE.Mesh(
       new THREE.BoxGeometry(0.14, 0.28, 0.06),
       rubberPadMat
@@ -1896,11 +2544,9 @@ export class Buckshot3DEngine {
     recoilPad.rotation.x = 0.08;
     gun.add(recoilPad);
 
-    // 2. MEKANİZMA GÖVDESİ (RECEIVER) & FİŞEK TAHLİYE PENCERESİ (EJECTION PORT)
     const receiverGroup = new THREE.Group();
     receiverGroup.position.set(0, 0.02, -0.16);
 
-    // Gövde alt ve sol blok
     const recBase = new THREE.Mesh(
       new THREE.BoxGeometry(0.165, 0.2, 0.62),
       brushedSteelMat
@@ -1908,7 +2554,6 @@ export class Buckshot3DEngine {
     recBase.castShadow = true;
     receiverGroup.add(recBase);
 
-    // Gövde üst kambur sırtı (Pah kırılmış profil)
     const recTop = new THREE.Mesh(
       new THREE.CylinderGeometry(0.082, 0.082, 0.62, 12),
       brushedSteelMat
@@ -1917,7 +2562,6 @@ export class Buckshot3DEngine {
     recTop.position.y = 0.08;
     receiverGroup.add(recTop);
 
-    // Sağ Yanda Gerçek Fişek Tahliye Penceresi Oyuğu (Ejection Port)
     const portCavity = new THREE.Mesh(
       new THREE.BoxGeometry(0.03, 0.09, 0.24),
       new THREE.MeshBasicMaterial({ color: 0x05070a })
@@ -1925,7 +2569,6 @@ export class Buckshot3DEngine {
     portCavity.position.set(0.072, 0.04, 0.05);
     receiverGroup.add(portCavity);
 
-    // Fişek Yatağı İçindeki 3D Fişek (Pompa çekildiğinde veya Büyüteç basıldığında görünür!)
     this.chamberShellMat = new THREE.MeshStandardMaterial({
       color: 0xdc2626,
       emissive: 0x991b1b,
@@ -1940,7 +2583,6 @@ export class Buckshot3DEngine {
     this.chamberShellMesh.position.set(0.068, 0.04, 0.05);
     receiverGroup.add(this.chamberShellMesh);
 
-    // Hareketli Krom Mekanizma Sürgüsü (Bolt Carrier — Kapalıyken fişeği örter, açıldığında geri kayar)
     this.boltCarrierMesh = new THREE.Mesh(
       new THREE.BoxGeometry(0.022, 0.086, 0.235),
       chromeBoltMat
@@ -1948,7 +2590,6 @@ export class Buckshot3DEngine {
     this.boltCarrierMesh.position.set(0.078, 0.04, 0.05);
     receiverGroup.add(this.boltCarrierMesh);
 
-    // Alt Tetik Korkuluğu Halkası (Trigger Guard) ve Kıvrımlı Metal Tetik
     const triggerGuard = new THREE.Mesh(
       new THREE.TorusGeometry(0.075, 0.015, 8, 16),
       darkBarrelSteelMat
@@ -1968,8 +2609,6 @@ export class Buckshot3DEngine {
 
     gun.add(receiverGroup);
 
-    // 3. ÇELİK ÇİFT BORU: ÜST NAMLU + HAVALANDIRMALI ŞERİT (VENT RIB) + ALT ŞARJÖR BORUSU
-    // Arka Namlu Yarısı (Sabit Kalan Kısım: z = 0.14 .. 0.84)
     const rearBarrel = new THREE.Mesh(
       new THREE.CylinderGeometry(0.048, 0.054, 0.72, 16),
       darkBarrelSteelMat
@@ -1979,7 +2618,6 @@ export class Buckshot3DEngine {
     rearBarrel.castShadow = true;
     gun.add(rearBarrel);
 
-    // Arka Havalandırmalı Üst Şerit (Vent Rib)
     const rearRib = new THREE.Mesh(
       new THREE.BoxGeometry(0.028, 0.022, 0.7),
       darkBarrelSteelMat
@@ -1987,7 +2625,6 @@ export class Buckshot3DEngine {
     rearRib.position.set(0, 0.142, 0.49);
     gun.add(rearRib);
 
-    // Kesik Namlu Ucunda Parlak Taze Metal Halka (Sawed-Off olduğunda kesim yerinde parlar!)
     this.cutBarrelRingMesh = new THREE.Mesh(
       new THREE.RingGeometry(0.032, 0.05, 16),
       new THREE.MeshBasicMaterial({
@@ -1999,7 +2636,6 @@ export class Buckshot3DEngine {
     this.cutBarrelRingMesh.visible = false;
     gun.add(this.cutBarrelRingMesh);
 
-    // Alt Şarjör Borusu (Magazine Tube) + Tırtıklı Ön Kapak
     const magTube = new THREE.Mesh(
       new THREE.CylinderGeometry(0.042, 0.042, 0.86, 14),
       brushedSteelMat
@@ -2017,7 +2653,6 @@ export class Buckshot3DEngine {
     magCap.position.set(0, 0.0, 1.01);
     gun.add(magCap);
 
-    // Ön Namlu Grubu (El Testeresi kullanıldığında kesilip düşen kısım: z = 0.85 .. 1.53)
     this.frontBarrelGroup = new THREE.Group();
 
     const frontBarrelCyl = new THREE.Mesh(
@@ -2029,7 +2664,6 @@ export class Buckshot3DEngine {
     frontBarrelCyl.castShadow = true;
     this.frontBarrelGroup.add(frontBarrelCyl);
 
-    // Namlu Ucunda Karanlık Oyuk (Hollow Bore)
     const muzzleHole = new THREE.Mesh(
       new THREE.CircleGeometry(0.038, 14),
       new THREE.MeshBasicMaterial({ color: 0x020202 })
@@ -2037,7 +2671,6 @@ export class Buckshot3DEngine {
     muzzleHole.position.set(0, 0.088, 1.532);
     this.frontBarrelGroup.add(muzzleHole);
 
-    // Ön Havalandırmalı Şerit (Vent Rib)
     const frontRib = new THREE.Mesh(
       new THREE.BoxGeometry(0.026, 0.022, 0.66),
       darkBarrelSteelMat
@@ -2045,7 +2678,6 @@ export class Buckshot3DEngine {
     frontRib.position.set(0, 0.14, 1.18);
     this.frontBarrelGroup.add(frontRib);
 
-    // Pirinç Arpacık (Brass Front Bead Sight)
     const beadSight = new THREE.Mesh(
       new THREE.SphereGeometry(0.018, 8, 8),
       brassBeadMat
@@ -2053,7 +2685,6 @@ export class Buckshot3DEngine {
     beadSight.position.set(0, 0.16, 1.48);
     this.frontBarrelGroup.add(beadSight);
 
-    // Namlu ile Alt Boruyu Bağlayan Metal Kelepçe (Barrel Clamp)
     const clamp = new THREE.Mesh(
       new THREE.BoxGeometry(0.11, 0.16, 0.06),
       brushedSteelMat
@@ -2063,7 +2694,6 @@ export class Buckshot3DEngine {
 
     gun.add(this.frontBarrelGroup);
 
-    // 4. OLUKLU CEVİZ POMPA EL KUNDAĞI (CORNCOB FOREND — İleri-Geri Kayar)
     this.shotgunPumpGroup = new THREE.Group();
     this.shotgunPumpGroup.position.set(0, -0.005, 0.54);
 
@@ -2075,7 +2705,6 @@ export class Buckshot3DEngine {
     forendCore.castShadow = true;
     this.shotgunPumpGroup.add(forendCore);
 
-    // Yatay oluk halkaları (Ribbed grooves)
     for (let r = -3; r <= 3; r++) {
       const grooveRing = new THREE.Mesh(
         new THREE.TorusGeometry(0.067, 0.007, 8, 16),
@@ -2085,7 +2714,6 @@ export class Buckshot3DEngine {
       this.shotgunPumpGroup.add(grooveRing);
     }
 
-    // Çift Çelik Kızak Çubuğu (Action Bars)
     [-0.048, 0.048].forEach((bx) => {
       const bar = new THREE.Mesh(
         new THREE.BoxGeometry(0.012, 0.022, 0.38),
@@ -2097,7 +2725,6 @@ export class Buckshot3DEngine {
 
     gun.add(this.shotgunPumpGroup);
 
-    // Raycast için görünmez geniş dokunma kutusu (Akıllı tahtada kolay seçilsin)
     const hitBox = new THREE.Mesh(
       new THREE.BoxGeometry(0.85, 0.55, 2.65),
       new THREE.MeshBasicMaterial({ visible: false })
@@ -2147,12 +2774,10 @@ export class Buckshot3DEngine {
     return piece;
   }
 
-  // React State Güncellemelerini 3D Sahneye Yansıt
   public syncState(next: Buckshot3DStateSnapshot): void {
     const prevSawed = this.currentState.isSawedOff;
     this.currentState = next;
 
-    // 1. Kesik Namlu (Sawed-off) durumu (Testere animasyonu sürerken kesim sonunda gizlenir)
     if (this.sawingTimer <= 0) {
       this.frontBarrelGroup.visible = !next.isSawedOff;
       this.cutBarrelRingMesh.visible = next.isSawedOff;
@@ -2165,27 +2790,21 @@ export class Buckshot3DEngine {
       this.severedBarrelOnTable.visible = false;
     }
 
-    // 2. Tahliye Penceresindeki (Ejection Port) Fişek Rengi
     if (next.currentChamberShell) {
       const isLive = next.currentChamberShell === "live";
       this.chamberShellMat.color.setHex(isLive ? 0xdc2626 : 0x2563eb);
       this.chamberShellMat.emissive.setHex(isLive ? 0x991b1b : 0x1d4ed8);
     }
 
-    // 3. Karakter Modellerini Mod'a Göre Senkronize Et:
-    // 2 Kişilik Düelloda: Oyuncu 1'in karşısında (avatarP2) Gaz Maskeli Savaşçı, Oyuncu 2'nin karşısında (avatarP1) Porselen Maskeli!
-    // Tek Kişilik (Solo) Modda: AI Krupiye Çatlak Porselen Maskeli (veya her iki karakter de özgün)!
     if (this.avatarP2.gasMaskHeadGroup && this.avatarP2.porcelainHeadGroup) {
       const showGasMask = next.mode === "duel";
       this.avatarP2.gasMaskHeadGroup.visible = showGasMask;
       this.avatarP2.porcelainHeadGroup.visible = !showGasMask;
     }
 
-    // 4. Kelepçe 3D modelleri
     this.avatarP1.cuffsGroup.visible = next.p1Cuffed;
     this.avatarP2.cuffsGroup.visible = next.p2Cuffed;
 
-    // 5. Tüfek Eldeyken 3D Hedef Nişangahlarını (Rakip Maskesi & Kendi Göğsü) Göster
     const p1HoldingGun =
       next.gunPickedUpBy === 1 && next.turn === 1 && next.gunAim === "neutral";
     const p2HoldingGun =
@@ -2200,7 +2819,6 @@ export class Buckshot3DEngine {
     this.avatarP1.targetReticleGroup.visible = p2HoldingGun;
     this.selfTargetP2.visible = p2HoldingGun;
 
-    // 6. 3D Defibrilatör Şarj Monitörü LED'leri
     for (let i = 0; i < 5; i++) {
       const p1On = i < next.p1Hp && i < next.maxHp;
       const p1Led = this.p1Leds[i];
@@ -2210,7 +2828,7 @@ export class Buckshot3DEngine {
         const col = next.wiresCutSuddenDeath ? 0xef4444 : 0x22c55e;
         mat1.color.setHex(col);
         mat1.emissive.setHex(col);
-        mat1.emissiveIntensity = 0.95;
+        mat1.emissiveIntensity = 1.15;
       } else {
         mat1.color.setHex(0x141e18);
         mat1.emissive.setHex(0x000000);
@@ -2225,7 +2843,7 @@ export class Buckshot3DEngine {
         const col = next.wiresCutSuddenDeath ? 0xef4444 : 0x22c55e;
         mat2.color.setHex(col);
         mat2.emissive.setHex(col);
-        mat2.emissiveIntensity = 0.95;
+        mat2.emissiveIntensity = 1.15;
       } else {
         mat2.color.setHex(0x141e18);
         mat2.emissive.setHex(0x000000);
@@ -2234,7 +2852,6 @@ export class Buckshot3DEngine {
     }
     this.cutWireSparkMesh.visible = next.wiresCutSuddenDeath;
 
-    // 7. Mermi Dizilim Tepsisi (Yeni Şarjör Başlangıcında 3D Kırmızı/Mavi Fişekler)
     const revHash = next.revealShells ? next.revealShells.join(",") : "none";
     if (revHash !== this.lastRevealHash) {
       this.lastRevealHash = revHash;
@@ -2251,7 +2868,6 @@ export class Buckshot3DEngine {
       }
     }
 
-    // 8. Masadaki 8'li 3D Eşya Modellerini, Kehribar Parlamalarını ve 3D Tebeşir Etiketlerini Senkronize Et
     const hash1 = next.p1Items.map((x) => x || "_").join(",");
     const hash2 = next.p2Items.map((x) => x || "_").join(",");
     const turnStealHash = `${next.turn}_${next.adrenalineStealSeat || 0}_${next.mode}`;
@@ -2315,11 +2931,9 @@ export class Buckshot3DEngine {
         wrapper.rotation.y = Math.PI;
       }
 
-      // 3D Eşya Modeli (%28 büyütülmüş)
       const itemMesh = create3DItemModel(itemKey);
       wrapper.add(itemMesh);
 
-      // Sıcak Kehribar / Kırmızı Taban Parlaması (Sırası gelen oyuncunun eşyalarında parlar)
       const glowColor = isStealTarget
         ? 0xf43f5e
         : isUsableNow
@@ -2341,7 +2955,6 @@ export class Buckshot3DEngine {
       if (trayOwner === 1) this.p1GlowPads.push(glowPad);
       else this.p2GlowPads.push(glowPad);
 
-      // Masa Yüzeyine Paralel Zarif 3D Tebeşir / Diegetic Etiket Yazısı (Örn: TESTERE, BÜYÜTEÇ, ADRENALİN)
       const labelTex = createChalkLabelTexture(
         ITEM_3D_LABELS[itemKey],
         isUsableNow,
@@ -2356,11 +2969,10 @@ export class Buckshot3DEngine {
         new THREE.PlaneGeometry(0.72, 0.19),
         labelMat
       );
-      labelPlane.rotation.x = -Math.PI / 2.35; // Kameraya doğru hafif eğimli masa etiketi
+      labelPlane.rotation.x = -Math.PI / 2.35;
       labelPlane.position.set(0, 0.06, 0.35);
       wrapper.add(labelPlane);
 
-      // Akıllı Tahtada Parmakla Iskalamamak İçin Geniş Görünmez Hitbox (THREE.BoxGeometry)
       const hitBox = new THREE.Mesh(
         new THREE.BoxGeometry(0.76, 0.75, 0.76),
         new THREE.MeshBasicMaterial({ visible: false })
@@ -2424,7 +3036,7 @@ export class Buckshot3DEngine {
     const hullGeo = new THREE.CylinderGeometry(0.048, 0.048, 0.22, 10);
     const hullMat = new THREE.MeshStandardMaterial({
       color: hullColor,
-      roughness: 0.4,
+      roughness: 0.38,
     });
     const hull = new THREE.Mesh(hullGeo, hullMat);
     hull.rotation.z = Math.PI / 2;
@@ -2443,7 +3055,6 @@ export class Buckshot3DEngine {
     return g;
   }
 
-  // Pompalı *ŞAK-ŞAK* Kurma ve 3D Kovan Fırlatma Efekti
   public triggerPumpEjectShell(type: ShellType): void {
     this.pumpOffsetZ = -0.25;
     const shellMesh = this.create3DShellMesh(type);
@@ -2457,11 +3068,7 @@ export class Buckshot3DEngine {
         0.08 + Math.random() * 0.03,
         (Math.random() - 0.5) * 0.06
       ),
-      rotVel: new THREE.Vector3(
-        0.24,
-        0.36 * (Math.random() - 0.5),
-        0.28
-      ),
+      rotVel: new THREE.Vector3(0.24, 0.36 * (Math.random() - 0.5), 0.28),
       settled: false,
       bounces: 0,
     });
@@ -2472,7 +3079,6 @@ export class Buckshot3DEngine {
     }
   }
 
-  // 3D Eşya Kullanım Animasyonu (3D El Uzanıp Kavrar + Testere Kesimi / Büyüteç Tahliye Penceresi)
   public triggerItemUse3DAnimation(
     userSeat: 1 | 2,
     itemKey: BuckshotItemKey,
@@ -2501,12 +3107,10 @@ export class Buckshot3DEngine {
       progress: 0,
     };
 
-    // Büyüteç kullanıldığında tüfeğin sağ yanındaki Fişek Tahliye Penceresini (Ejection Port) aç!
     if (itemKey === "magnifier") {
       this.inspectingChamberTimer = 2.4;
     }
 
-    // El Testeresi kullanıldığında namlu ortasında ileri-geri sürtünme + kıvılcım + ön namlunun kopup düşmesi!
     if (itemKey === "handsaw") {
       this.sawingTimer = 0.72;
       if (this.sawingHandsawMesh) {
@@ -2521,7 +3125,6 @@ export class Buckshot3DEngine {
     }
   }
 
-  // Ateşleme Sinematik Efekti (Namlu Alevi, Geri Tepme, Vurulan Karakterin ve Ekranın Savrulması)
   public triggerShotEffect(
     shooterSeat: 1 | 2,
     targetSeat: 1 | 2,
@@ -2532,7 +3135,7 @@ export class Buckshot3DEngine {
 
     if (shellType === "live") {
       this.muzzleFlashTimer = 0.24;
-      this.muzzleLight.intensity = isSawedOff ? 40 : 28;
+      this.muzzleLight.intensity = isSawedOff ? 44 : 30;
 
       const barrelTipZ = targetSeat === 1 ? 1.15 : -1.15;
       this.muzzleLight.position.set(0, 1.38, barrelTipZ);
@@ -2543,7 +3146,6 @@ export class Buckshot3DEngine {
         isSawedOff ? 38 : 24
       );
 
-      // Ateş eden kamerada geri tepme, vurulan kamerada ve 3D karakterde şiddetli savrulma!
       if (shooterSeat === 1) this.cam1Shake = 0.22;
       if (shooterSeat === 2) this.cam2Shake = 0.22;
 
@@ -2557,7 +3159,6 @@ export class Buckshot3DEngine {
         this.avatar2HitRecoil = isSawedOff ? 1.45 : 1.05;
       }
     } else {
-      // BOŞ Fişek: hafif tetik titremesi
       if (shooterSeat === 1) this.cam1Shake = 0.06;
       else this.cam2Shake = 0.06;
     }
@@ -2593,7 +3194,6 @@ export class Buckshot3DEngine {
     }
   }
 
-  // BÖLÜNMÜŞ EKRAN (DUAL-VIEWPORT) MILİMETRİK 3D RAYCASTING (FOV 74 / 66 SENKRONİZE)
   public raycastFromPointer(
     clientX: number,
     clientY: number
@@ -2675,8 +3275,13 @@ export class Buckshot3DEngine {
     const h = parent ? parent.clientHeight : window.innerHeight;
     if (w <= 0 || h <= 0) return;
 
-    // Retro PS1 Dither Çözünürlük Çarpanı
-    const retroScale = 0.68;
+    this.renderer.setPixelRatio(
+      Math.min(
+        typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
+        1.35
+      )
+    );
+    const retroScale = 0.72;
     this.renderer.setSize(
       Math.max(320, Math.floor(w * retroScale)),
       Math.max(200, Math.floor(h * retroScale)),
@@ -2698,9 +3303,26 @@ export class Buckshot3DEngine {
   private updateSceneKinematics(dt: number, elapsed: number): void {
     const st = this.currentState;
 
-    // 1. Sallanan Sahne Spot Işıkları
-    this.spot1.position.x = -1.2 + Math.sin(elapsed * 1.1) * 0.18;
-    this.spot2.position.x = 1.2 + Math.cos(elapsed * 0.95) * 0.18;
+    // 1. Ana Tungsten Tavan Lambası Sallanma ve Voltaj Titremesi (Flicker)
+    this.mainSpot.position.x = Math.sin(elapsed * 0.95) * 0.14;
+    this.mainSpot.position.z = Math.cos(elapsed * 0.8) * 0.14;
+    const flicker =
+      Math.sin(elapsed * 23) * Math.sin(elapsed * 41) > 0.86 ? -6 : 0;
+    this.mainSpot.intensity = 46 + Math.sin(elapsed * 3.2) * 2.5 + flicker;
+
+    // Jeneratör panosu uyarı LED'i yanıp sönmesi
+    const ledOn = Math.sin(elapsed * 5.5) > 0;
+    this.warningLedMeshes.forEach((led) => {
+      (led.material as THREE.MeshBasicMaterial).color.setHex(
+        ledOn ? 0xef4444 : 0x3b0a0a
+      );
+    });
+
+    // Uçuşan mikro toz zerrecikleri süzülmesi
+    if (this.dustPoints) {
+      this.dustPoints.rotation.y = elapsed * 0.04;
+      this.dustPoints.position.y = Math.sin(elapsed * 0.7) * 0.08;
+    }
 
     // 2. Eşya Taban Parlaması Nabız Efekti
     const pulseOpacity = 0.32 + Math.sin(elapsed * 4.2) * 0.14;
@@ -2723,7 +3345,10 @@ export class Buckshot3DEngine {
     this.shotgunPumpGroup.position.z = 0.54 + this.pumpOffsetZ;
 
     if (this.inspectingChamberTimer > 0) {
-      this.inspectingChamberTimer = Math.max(0, this.inspectingChamberTimer - dt);
+      this.inspectingChamberTimer = Math.max(
+        0,
+        this.inspectingChamberTimer - dt
+      );
     }
     const boltOpenOffset =
       this.inspectingChamberTimer > 0
@@ -2750,7 +3375,6 @@ export class Buckshot3DEngine {
         this.frontBarrelGroup.visible = false;
         this.cutBarrelRingMesh.visible = true;
 
-        // Kopan namlu ucu döne döne masaya düşsün!
         const fallingMesh = this.buildSeveredBarrelPiece();
         fallingMesh.position.set(0.35, 1.25, 0.15);
         this.scene.add(fallingMesh);
@@ -2795,29 +3419,25 @@ export class Buckshot3DEngine {
     let targetGunX = 0;
     let targetGunY = 1.07;
     let targetGunZ = 0;
-    let targetGunRotY = Math.PI / 2; // Masada yatay duruş
+    let targetGunRotY = Math.PI / 2;
     let targetGunRotX = 0;
 
     if (st.gunAim === "p2") {
-      // Namlu -Z'deki Oyuncu 2 / Krupiye yüzüne doğrulur!
       targetGunY = 1.54;
       targetGunZ = -0.25;
       targetGunRotY = Math.PI;
       targetGunRotX = -0.07;
     } else if (st.gunAim === "p1") {
-      // Namlu +Z'deki Oyuncu 1 yüzüne doğrulur!
       targetGunY = 1.54;
       targetGunZ = 0.25;
       targetGunRotY = 0;
       targetGunRotX = -0.07;
     } else if (st.gunPickedUpBy === 1) {
-      // Oyuncu 1 tüfeği eline aldı: ellerin kavrama hizasına yükselir
       targetGunY = 1.38;
       targetGunZ = 0.55;
       targetGunRotY = Math.PI * 0.92;
       targetGunRotX = -0.04;
     } else if (st.gunPickedUpBy === 2) {
-      // Oyuncu 2 tüfeği eline aldı
       targetGunY = 1.38;
       targetGunZ = -0.55;
       targetGunRotY = Math.PI * 0.08;
@@ -2850,8 +3470,7 @@ export class Buckshot3DEngine {
       dt * 9
     );
 
-    // 7. İki Farklı 3D Karakterin Canlı Tepkileri:
-    // Nefes alma, sıra kendisindeyken masaya yaklaşma, tüfek doğrultulduğunda irkilme, vurulduğunda geriye savrulma, eşya/tüfek tutma!
+    // 7. İki Farklı 3D Karakterin Canlı Tepkileri
     this.avatar1HitRecoil = THREE.MathUtils.lerp(
       this.avatar1HitRecoil,
       0,
@@ -2872,10 +3491,10 @@ export class Buckshot3DEngine {
       const isHoldingShotgun =
         st.gunPickedUpBy === seat ||
         (st.turn === seat && st.gunAim !== "neutral");
-      const hitRecoil = seat === 1 ? this.avatar1HitRecoil : this.avatar2HitRecoil;
+      const hitRecoil =
+        seat === 1 ? this.avatar1HitRecoil : this.avatar2HitRecoil;
       const zSign = seat === 1 ? 1 : -1;
 
-      // Gövde ve Kafa Z/Y Konumu (Sırada öne eğilme, nişanda irkilme, vurulunca geriye savrulma)
       const leanZ = isAimedAtMe ? 0.36 : isMyTurn ? -0.18 : 0;
       const targetRootZ = zSign * (4.18 + leanZ + hitRecoil * 1.45);
       av.root.position.z = THREE.MathUtils.lerp(
@@ -2900,18 +3519,15 @@ export class Buckshot3DEngine {
         1.85 + Math.sin(elapsed * 2.2 + phaseOff) * 0.03;
       av.torsoGroup.rotation.x = -hitRecoil * 0.38;
 
-      // 3D Hedef Nişangahı Halkası Dönüşü
       if (av.targetReticleGroup.visible) {
         av.targetReticleGroup.children[0].rotation.z = elapsed * 1.6;
         av.targetReticleGroup.children[1].rotation.z = -elapsed * 2.4;
       }
 
-      // 3D Ellerin Canlı Konumu (Eşyaya uzanma, tüfeği kavrama, savunma veya masaya yaklaşma)
-      let leftTarget = av.baseLeftHandPos.clone();
-      let rightTarget = av.baseRightHandPos.clone();
+      const leftTarget = av.baseLeftHandPos.clone();
+      const rightTarget = av.baseRightHandPos.clone();
 
       if (this.activeItemAnim && this.activeItemAnim.userSeat === seat) {
-        // Masadaki 3D eşyaya dokunulduğu an el eşyaya uzanıp kavrar!
         const itemWorld = this.activeItemAnim.mesh.position.clone();
         const localTarget = av.root.worldToLocal(itemWorld);
         if (localTarget.x < 0) {
@@ -2920,15 +3536,12 @@ export class Buckshot3DEngine {
           rightTarget.copy(localTarget);
         }
       } else if (isHoldingShotgun) {
-        // Tüfek eldeyken 3D eller tüfeğin kabza ve pompa kundağına uzanır
         leftTarget.set(-0.32, 1.38, 2.75);
         rightTarget.set(0.32, 1.38, 2.45);
       } else if (isAimedAtMe) {
-        // Yüzüne tüfek doğrultulduğunda ellerini hafifçe yukarı kaldırıp irkilir
         leftTarget.set(-0.78, 1.85, 0.92);
         rightTarget.set(0.78, 1.85, 0.92);
       } else if (isMyTurn) {
-        // Sıra kendisindeyken ellerini masaya yaklaştırır
         leftTarget.z += 0.32;
         rightTarget.z += 0.32;
       }
@@ -2998,7 +3611,7 @@ export class Buckshot3DEngine {
       }
     }
 
-    // 11. Kameraların Konum, Bakış Açısı ve Head-Bob / Breathing (Genişletilmiş FOV 74 / 66 ile Tam Masa Hakimiyeti!)
+    // 11. Kameraların Konum, Bakış Açısı ve Head-Bob / Breathing (FOV 74 / 66)
     this.cam1Shake = Math.max(0, this.cam1Shake - dt * 1.1);
     this.cam2Shake = Math.max(0, this.cam2Shake - dt * 1.1);
     this.cam1Knockback = THREE.MathUtils.lerp(this.cam1Knockback, 0, dt * 4.5);
@@ -3007,7 +3620,6 @@ export class Buckshot3DEngine {
     const isRevealing =
       st.revealShells !== null && st.revealShells.length > 0;
 
-    // Oyuncu tüfeği eline aldığında veya eşya kullandığında hafif dinamik yakınlaşma/eğilme
     const p1ActionLean =
       st.gunPickedUpBy === 1 ||
       (st.turn === 1 && st.gunAim !== "neutral") ||
@@ -3026,7 +3638,6 @@ export class Buckshot3DEngine {
     const bobY2 = Math.sin(elapsed * 1.8 + 1.5) * 0.032;
     const bobX2 = Math.cos(elapsed * 0.9 + 1.5) * 0.022;
 
-    // Kamera 1 (+Z Oyuncu 1 Gözü — Geriye ve hafif yukarı çekilmiş tam masa kadrajı)
     const p1BasePos = isRevealing
       ? new THREE.Vector3(-1.35, 2.38, 1.92)
       : new THREE.Vector3(
@@ -3049,7 +3660,6 @@ export class Buckshot3DEngine {
     this.camP1.position.lerp(p1BasePos, dt * 7.5);
     this.camP1.lookAt(p1LookTarget);
 
-    // Kamera 2 (-Z Oyuncu 2 Gözü — Geriye ve hafif yukarı çekilmiş tam masa kadrajı)
     const p2BasePos = isRevealing
       ? new THREE.Vector3(-1.35, 2.38, -1.92)
       : new THREE.Vector3(
@@ -3080,7 +3690,6 @@ export class Buckshot3DEngine {
     if (w <= 0 || h <= 0) return;
 
     if (this.currentState.mode === "solo") {
-      // Tek Kişilik Tam Ekran: FOV 66
       this.renderer.setScissorTest(false);
       this.renderer.setViewport(0, 0, w, h);
       this.camP1.fov = 66;
@@ -3088,11 +3697,9 @@ export class Buckshot3DEngine {
       this.camP1.updateProjectionMatrix();
       this.renderer.render(this.scene, this.camP1);
     } else {
-      // 2 KİŞİLİK DÜELLO: %50 SOL (camP1) + %50 SAĞ (camP2) DUAL-POV SPLIT-SCREEN (FOV 74)!
       const halfW = Math.floor(w / 2);
       this.renderer.setScissorTest(true);
 
-      // 1) Sol Yarı: Oyuncu 1 Gözü (+Z'den -Z'ye bakar, FOV 74)
       this.renderer.setViewport(0, 0, halfW, h);
       this.renderer.setScissor(0, 0, halfW, h);
       this.camP1.fov = 74;
@@ -3100,7 +3707,6 @@ export class Buckshot3DEngine {
       this.camP1.updateProjectionMatrix();
       this.renderer.render(this.scene, this.camP1);
 
-      // 2) Sağ Yarı: Oyuncu 2 Gözü (-Z'den +Z'ye bakar, FOV 74)
       this.renderer.setViewport(halfW, 0, w - halfW, h);
       this.renderer.setScissor(halfW, 0, w - halfW, h);
       this.camP2.fov = 74;
@@ -3110,7 +3716,6 @@ export class Buckshot3DEngine {
     }
   }
 
-  // Tam WebGL Bellek Temizliği (forceContextLoss kullanmadan dinamik canvas silinir)
   public dispose(): void {
     this.disposed = true;
     if (this.animFrameId !== null) {
@@ -3130,6 +3735,8 @@ export class Buckshot3DEngine {
         mats.forEach((m) => {
           const std = m as THREE.MeshStandardMaterial;
           if (std.map) std.map.dispose();
+          if (std.bumpMap) std.bumpMap.dispose();
+          if (std.roughnessMap) std.roughnessMap.dispose();
           m.dispose();
         });
       }

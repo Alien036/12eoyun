@@ -1647,6 +1647,16 @@ export default function BuckshotView({
             : ""
         }`}
       >
+        {/* Her Yarı Ekran İçin Ağır Kenar Karartması (Chiaroscuro Vignette) + CRT Scanline + İnce Film Grain */}
+        <div
+          className="pointer-events-none absolute inset-0 z-10"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 50% 55%, transparent 38%, rgba(0,0,0,0.68) 80%, rgba(0,0,0,0.94) 100%), repeating-linear-gradient(0deg, rgba(0,0,0,0.20) 0px, rgba(0,0,0,0.20) 1px, transparent 1px, transparent 3px), radial-gradient(rgba(255,235,205,0.03) 1px, transparent 0)",
+            backgroundSize: "100% 100%, 100% 3px, 3px 3px",
+          }}
+        />
+
         {/* Vurulan Oyuncunun Yarı Ekranında Kan Kırmızısı Elektroşok Kararması */}
         <AnimatePresence>
           {hitScreenEffect === seat && (
