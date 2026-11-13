@@ -153,7 +153,7 @@ export function stepAutoComplete(st: KlondikeState): KlondikeState | null {
     if (canPlaceOnFoundation(top, fPile, top.suit)) {
       col.pop();
       fPile.push({ ...top, faceUp: true });
-      next.score += 150;
+      next.score += 40;
       next.moves += 1;
       return next;
     }

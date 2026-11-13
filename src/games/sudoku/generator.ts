@@ -6,17 +6,32 @@ export const SUDOKU_CONFIG: Record<
     label: string;
     blanksTarget: number;
     cellPoints: number;
-    speedBase: number;
+    completionReward: number;
   }
 > = {
-  easy: { label: "Kolay", blanksTarget: 34, cellPoints: 30, speedBase: 1400 },
-  medium: { label: "Orta", blanksTarget: 43, cellPoints: 60, speedBase: 2200 },
-  hard: { label: "Zor", blanksTarget: 50, cellPoints: 100, speedBase: 3200 },
+  easy: {
+    label: "Kolay",
+    blanksTarget: 34,
+    cellPoints: 15,
+    completionReward: 500,
+  },
+  medium: {
+    label: "Orta",
+    blanksTarget: 43,
+    cellPoints: 25,
+    completionReward: 900,
+  },
+  hard: {
+    label: "Zor",
+    blanksTarget: 50,
+    cellPoints: 35,
+    completionReward: 1400,
+  },
   expert: {
     label: "Uzman",
     blanksTarget: 55,
-    cellPoints: 150,
-    speedBase: 4500,
+    cellPoints: 45,
+    completionReward: 2000,
   },
 };
 

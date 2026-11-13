@@ -158,18 +158,20 @@ export default function BilliardsView({
       let nextBest = bestStreak;
 
       if (scratched) {
-        nextScore = Math.max(0, nextScore - 300);
+        nextScore = Math.max(0, nextScore - 150);
         nextStreak = 0;
         onComboEnergyChange?.(0);
         setBallInHand(true);
         setStatusBanner(
-          "Faul! Beyaz top deliğe girdi (-300 P). Beyaz topu istediğin yere koy."
+          "Faul! Beyaz top deliğe girdi (-150 P). Beyaz topu istediğin yere koy."
         );
       } else if (numberedPocketed.length > 0) {
         nextStreak = streak + numberedPocketed.length;
         nextBest = Math.max(bestStreak, nextStreak);
         onComboEnergyChange?.(nextStreak);
-        const pts = numberedPocketed.length * 250 * Math.max(1, nextStreak);
+        // Sokulan her top +150 (seri çarpanı maksimum 2x)
+        const streakMult = Math.min(2, 1 + (nextStreak - 1) * 0.25);
+        const pts = Math.round(numberedPocketed.length * 150 * streakMult);
         nextScore += pts;
         setStatusBanner(
           `Harika Vuruş! +${pts.toLocaleString("tr-TR")} Puan (Seri x${nextStreak})`
@@ -187,11 +189,13 @@ export default function BilliardsView({
       // 15 topun tamamı bitti mi?
       const remainingObj = balls.filter((b) => b.id > 0 && !b.pocketed).length;
       if (remainingObj === 0) {
-        const bonus = Math.max(
-          500,
-          3200 - shotsCount * 55 - Math.floor(elapsedSec * 4)
+        // Maç Galibiyeti +2.000 + süre/isabet bonusu (maks +800)
+        const accuracyTimeBonus = Math.min(
+          800,
+          Math.max(0, Math.round(800 - Math.max(0, shotsCount - 15) * 28 - elapsedSec * 1.5))
         );
-        const total = nextScore + bonus;
+        const winReward = 2000 + accuracyTimeBonus;
+        const total = nextScore + winReward;
         setP1Score(total);
         sound.playVictory();
         confetti({ particleCount: 95, spread: 75, origin: { y: 0.6 } });
@@ -211,7 +215,7 @@ export default function BilliardsView({
 
         setGameOverInfo({
           title: "Tüm Masayı Temizledin!",
-          subtitle: `${shotsCount} vuruş • Süre/Vuruş Bonusu +${bonus.toLocaleString(
+          subtitle: `${shotsCount} vuruş • Galibiyet & İsabet Bonusu +${winReward.toLocaleString(
             "tr-TR"
           )} P`,
           finalP1: total,
@@ -241,12 +245,15 @@ export default function BilliardsView({
         !scratched && myGroup !== null && remainingMyBalls === 0;
       const winnerNum: 1 | 2 = legalEightWin ? activePlayerNum : otherPlayerNum;
 
+      // Maç Galibiyeti +2.000 + süre/isabet bonusu (maks +800)
+      const duelTimeBonus = Math.min(
+        800,
+        Math.max(0, Math.round(800 - elapsedSec * 2))
+      );
       const final1 =
-        p1Score +
-        (winnerNum === 1 ? 3500 + Math.max(0, 800 - elapsedSec * 2) : 250);
+        p1Score + (winnerNum === 1 ? 2000 + duelTimeBonus : 250);
       const final2 =
-        p2Score +
-        (winnerNum === 2 ? 3500 + Math.max(0, 800 - elapsedSec * 2) : 250);
+        p2Score + (winnerNum === 2 ? 2000 + duelTimeBonus : 250);
 
       sound.playVictory();
       confetti({ particleCount: 95, spread: 75, origin: { y: 0.6 } });
@@ -325,7 +332,8 @@ export default function BilliardsView({
       const newStr = streak + myPocketedCount;
       setStreak(newStr);
       onComboEnergyChange?.(newStr);
-      const gained = myPocketedCount * 250 * Math.max(1, newStr);
+      const streakMult = Math.min(2, 1 + (newStr - 1) * 0.25);
+      const gained = Math.round(myPocketedCount * 150 * streakMult);
       if (activePlayerNum === 1) {
         setP1Score((s) => s + gained);
         setBestStreak((b) => Math.max(b, newStr));

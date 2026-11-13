@@ -24,6 +24,8 @@ export interface MoveResult {
   newCombo: number;
   newGraceMoves: number;
   praiseText: string | null;
+  praiseTier: number;
+  isAllClear: boolean;
 }
 
 export function createEmptyBoard(): BoardGrid {
@@ -103,15 +105,19 @@ export function getPreviewInfo(
   };
 }
 
-// Dengeli Puanlama:
-// Yerleşen kare başına +10 puan
-// Patlayan 1/2/3/4+ satır-sütun için 100 / 300 / 600 / 1200 x Kombo Çarpanı
+// 0 - 10.000 Puan Ekonomisi:
+// Yerleşen kare başına +2 puan
+// Patlayan 1/2/3/4+ satır-sütun için 80 / 180 / 320 / 500 x Doğrusal Kombo Çarpanı (maks 2.5x)
 function getBaseBlastPoints(lines: number): number {
   if (lines <= 0) return 0;
-  if (lines === 1) return 100;
-  if (lines === 2) return 300;
-  if (lines === 3) return 600;
-  return 1200;
+  if (lines === 1) return 80;
+  if (lines === 2) return 180;
+  if (lines === 3) return 320;
+  return 500;
+}
+
+function pickRandomHype(list: string[]): string {
+  return list[Math.floor(Math.random() * list.length)];
 }
 
 export function executePlacement(
@@ -151,7 +157,7 @@ export function executePlacement(
   }
 
   const linesCleared = clearedRows.length + clearedCols.length;
-  const placedPoints = piece.cellCount * 10;
+  const placedPoints = piece.cellCount * 2;
 
   const clearedCells: { row: number; col: number; family: ShapeFamily }[] = [];
   const seen = new Set<string>();
@@ -186,7 +192,8 @@ export function executePlacement(
   if (linesCleared > 0) {
     newCombo = currentCombo > 0 && graceMovesLeft > 0 ? currentCombo + 1 : 1;
     newGraceMoves = 3;
-    blastPoints = getBaseBlastPoints(linesCleared) * Math.max(1, newCombo);
+    const comboMult = Math.min(2.5, 1 + (newCombo - 1) * 0.25);
+    blastPoints = Math.round(getBaseBlastPoints(linesCleared) * comboMult);
   } else {
     const rem = graceMovesLeft - 1;
     if (rem <= 0) {
@@ -197,27 +204,56 @@ export function executePlacement(
     }
   }
 
+  const isAllClear =
+    linesCleared > 0 &&
+    nextBoard.every((row) => row.every((cell) => cell === null));
+  const allClearBonus = isAllClear ? 500 : 0;
+
   let praiseText: string | null = null;
-  if (linesCleared >= 4 || (linesCleared >= 3 && newCombo >= 3)) {
-    praiseText = "EFSANE!";
+  let praiseTier = 0;
+
+  if (isAllClear) {
+    praiseText = "TAHTA TERTEMİZ! +500";
+    praiseTier = 5;
+  } else if (linesCleared >= 4 || newCombo >= 6) {
+    praiseText = pickRandomHype([
+      "EFSANEVİ!",
+      "DURDURULAMAZ!",
+      "SINIFIN KRALI! 👑",
+    ]);
+    praiseTier = 4;
   } else if (linesCleared === 3 || newCombo >= 4) {
-    praiseText = "MÜKEMMEL!";
+    praiseText = pickRandomHype([
+      "MÜKEMMEL!",
+      "YIKTIN GEÇTİN!",
+      "ALEV ALDI! 🔥",
+    ]);
+    praiseTier = 3;
   } else if (linesCleared === 2 || newCombo >= 2) {
-    praiseText = "HARİKA!";
+    praiseText = pickRandomHype([
+      "HARİKASIN!",
+      "SÜPERSİN!",
+      "ŞAHANE!",
+      "BÖYLE DEVAM!",
+    ]);
+    praiseTier = 2;
   } else if (linesCleared === 1) {
-    praiseText = "SÜPER!";
+    praiseText = pickRandomHype(["GÜZEL!", "İŞTE BU!", "TEMİZ!"]);
+    praiseTier = 1;
   }
 
   return {
     board: nextBoard,
     placedPoints,
-    blastPoints,
-    totalEarned: placedPoints + blastPoints,
+    blastPoints: blastPoints + allClearBonus,
+    totalEarned: placedPoints + blastPoints + allClearBonus,
     linesCleared,
     clearedCells,
     newCombo,
     newGraceMoves,
     praiseText,
+    praiseTier,
+    isAllClear,
   };
 }
 

@@ -365,6 +365,31 @@ export interface ActivityFeedEvent {
 const PLAYERS_COL = "players";
 const FEED_COL = "activityFeed";
 
+// Tek maçta kazanılabilecek maksimum tavan puan (Hard Clamp: 0 - 10.000 / Block Blast için 12.000)
+export function getGameScoreCap(game: GameKey): number {
+  return game === "blockBlast" ? 12000 : 10000;
+}
+
+export function clampGameScore(game: GameKey, rawScore: number): number {
+  const cap = getGameScoreCap(game);
+  return Math.min(cap, Math.max(0, Math.round(Number(rawScore) || 0)));
+}
+
+// Eski testlerden kalan 10.000+ (Block Blast için 12.000+) şişik skorları 4.500'e otomatik normalize eder
+export function sanitizeStoredHighScore(game: GameKey, rawHigh: unknown): {
+  value: number;
+  wasInflated: boolean;
+} {
+  const num = Math.max(0, Math.round(Number(rawHigh) || 0));
+  const cap = getGameScoreCap(game);
+  if (num > cap) {
+    return { value: 4500, wasInflated: true };
+  }
+  return { value: num, wasInflated: false };
+}
+
+const sanitizedPlayerIdsInSession = new Set<string>();
+
 export function createEmptyGamesMap(): PlayerGamesMap {
   return {
     blockBlast: { highScore: 0, gamesPlayed: 0, maxCombo: 0 },
@@ -442,28 +467,51 @@ export function normalizePlayerDoc(
   const legacyTotalGames = Number(raw.totalGames) || 0;
   const legacyMaxCombo = Number(raw.maxCombo) || 0;
 
+  const bbRaw = Number(rawGames.blockBlast?.highScore) || legacyHighScore || 0;
+  const bbSan = sanitizeStoredHighScore("blockBlast", bbRaw);
+  const chSan = sanitizeStoredHighScore("chess", rawGames.chess?.highScore);
+  const biSan = sanitizeStoredHighScore(
+    "billiards",
+    rawGames.billiards?.highScore
+  );
+  const soSan = sanitizeStoredHighScore(
+    "solitaire",
+    rawGames.solitaire?.highScore
+  );
+  const suSan = sanitizeStoredHighScore("sudoku", rawGames.sudoku?.highScore);
+  const crSan = sanitizeStoredHighScore(
+    "chainReaction",
+    rawGames.chainReaction?.highScore
+  );
+  const luSan = sanitizeStoredHighScore("ludo", rawGames.ludo?.highScore);
+  const dsSan = sanitizeStoredHighScore("dotsSos", rawGames.dotsSos?.highScore);
+  const tkSan = sanitizeStoredHighScore("tanks", rawGames.tanks?.highScore);
+  const mmSan = sanitizeStoredHighScore(
+    "memoryMatch",
+    rawGames.memoryMatch?.highScore
+  );
+
   const games: PlayerGamesMap = {
     blockBlast: {
-      highScore:
-        Number(rawGames.blockBlast?.highScore) || legacyHighScore || 0,
+      highScore: bbSan.value,
       gamesPlayed:
         Number(rawGames.blockBlast?.gamesPlayed) || legacyTotalGames || 0,
       maxCombo: Number(rawGames.blockBlast?.maxCombo) || legacyMaxCombo || 0,
     },
     chess: {
-      highScore: Number(rawGames.chess?.highScore) || 0,
+      highScore: chSan.value,
       gamesPlayed: Number(rawGames.chess?.gamesPlayed) || 0,
       wins: Number(rawGames.chess?.wins) || 0,
       losses: Number(rawGames.chess?.losses) || 0,
     },
     billiards: {
-      highScore: Number(rawGames.billiards?.highScore) || 0,
+      highScore: biSan.value,
       gamesPlayed: Number(rawGames.billiards?.gamesPlayed) || 0,
       wins: Number(rawGames.billiards?.wins) || 0,
       bestStreak: Number(rawGames.billiards?.bestStreak) || 0,
     },
     solitaire: {
-      highScore: Number(rawGames.solitaire?.highScore) || 0,
+      highScore: soSan.value,
       gamesPlayed: Number(rawGames.solitaire?.gamesPlayed) || 0,
       wins: Number(rawGames.solitaire?.wins) || 0,
       bestTimeSec:
@@ -472,7 +520,7 @@ export function normalizePlayerDoc(
           : null,
     },
     sudoku: {
-      highScore: Number(rawGames.sudoku?.highScore) || 0,
+      highScore: suSan.value,
       gamesPlayed: Number(rawGames.sudoku?.gamesPlayed) || 0,
       wins: Number(rawGames.sudoku?.wins) || 0,
       bestTimeSec:
@@ -481,27 +529,27 @@ export function normalizePlayerDoc(
           : null,
     },
     chainReaction: {
-      highScore: Number(rawGames.chainReaction?.highScore) || 0,
+      highScore: crSan.value,
       gamesPlayed: Number(rawGames.chainReaction?.gamesPlayed) || 0,
       wins: Number(rawGames.chainReaction?.wins) || 0,
     },
     ludo: {
-      highScore: Number(rawGames.ludo?.highScore) || 0,
+      highScore: luSan.value,
       gamesPlayed: Number(rawGames.ludo?.gamesPlayed) || 0,
       wins: Number(rawGames.ludo?.wins) || 0,
     },
     dotsSos: {
-      highScore: Number(rawGames.dotsSos?.highScore) || 0,
+      highScore: dsSan.value,
       gamesPlayed: Number(rawGames.dotsSos?.gamesPlayed) || 0,
       wins: Number(rawGames.dotsSos?.wins) || 0,
     },
     tanks: {
-      highScore: Number(rawGames.tanks?.highScore) || 0,
+      highScore: tkSan.value,
       gamesPlayed: Number(rawGames.tanks?.gamesPlayed) || 0,
       wins: Number(rawGames.tanks?.wins) || 0,
     },
     memoryMatch: {
-      highScore: Number(rawGames.memoryMatch?.highScore) || 0,
+      highScore: mmSan.value,
       gamesPlayed: Number(rawGames.memoryMatch?.gamesPlayed) || 0,
       wins: Number(rawGames.memoryMatch?.wins) || 0,
     },
@@ -509,6 +557,41 @@ export function normalizePlayerDoc(
 
   const overallBestScore = calculateOverallScore(games);
   const fc = String(raw.frameColor || "cyan") as FrameColorKey;
+
+  const anyInflated =
+    bbSan.wasInflated ||
+    chSan.wasInflated ||
+    biSan.wasInflated ||
+    soSan.wasInflated ||
+    suSan.wasInflated ||
+    crSan.wasInflated ||
+    luSan.wasInflated ||
+    dsSan.wasInflated ||
+    tkSan.wasInflated ||
+    mmSan.wasInflated ||
+    Number(raw.overallBestScore) !== overallBestScore;
+
+  // Eğer Firestore'da eski testlerden kalan 10.000+ şişik skor varsa profili silmeden otomatik 4.500'e çekip güncelle
+  if (
+    anyInflated &&
+    typeof window !== "undefined" &&
+    id &&
+    !id.startsWith("__bot_") &&
+    !sanitizedPlayerIdsInSession.has(id)
+  ) {
+    sanitizedPlayerIdsInSession.add(id);
+    setDoc(
+      doc(db, PLAYERS_COL, id),
+      {
+        games,
+        overallBestScore,
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    ).catch((err) => {
+      console.error("Otomatik skor sanitizasyon hatası:", err);
+    });
+  }
 
   return {
     id,
@@ -795,7 +878,7 @@ export async function recordSoloGameResult(
   const nextGames: PlayerGamesMap = cloneGamesMap(baseDoc.games);
 
   const prevHigh = nextGames[result.game]?.highScore ?? 0;
-  const cleanScore = Math.max(0, Math.round(result.score));
+  const cleanScore = clampGameScore(result.game, result.score);
   const isNewPersonalBest = cleanScore > prevHigh && cleanScore > 0;
 
   if (result.game === "blockBlast") {
@@ -929,7 +1012,7 @@ export async function recordDuelGameResult(params: {
 
     const nextGames: PlayerGamesMap = cloneGamesMap(base.games);
 
-    const cleanScore = Math.max(0, Math.round(myScore));
+    const cleanScore = clampGameScore(params.game, myScore);
     if (params.game === "chess") {
       nextGames.chess.gamesPlayed += 1;
       nextGames.chess.highScore = Math.max(
@@ -1016,6 +1099,7 @@ export interface MultiplayerStandingInput {
   isBot?: boolean;
   rank: number; // 1 = Şampiyon, 2 = İkinci, 3 = Üçüncü, 4 = Dördüncü
   actionScore: number; // Oyun içi topladığı aksiyon puanı
+  customFinalScore?: number; // Oyuna özel hesaplanmış net maç sonu puanı (0 - 10.000)
   statSummary?: string;
 }
 
@@ -1032,27 +1116,53 @@ export async function recordMultiplayerMatchResult(params: {
 }): Promise<MultiplayerFinalStanding[]> {
   const now = Date.now();
   const totalPlayers = params.standings.length;
-  const championBonus = totalPlayers >= 4 ? 4500 : 3500;
 
-  // Her koltuk için adil puan hesaplama
+  // Her koltuk için 0 - 10.000 ölçeğinde dengelenmiş puan hesaplama
   const computed: MultiplayerFinalStanding[] = params.standings.map((st) => {
     const cleanAction = Math.max(0, Math.round(st.actionScore));
-    let finalScore = 0;
-    if (st.rank === 1) {
-      // 1. Olan Oyuncu: Oyun içi aksiyon puanı + 3.500 (4 kişiyse +4.500) Şampiyonluk Bonusu
-      finalScore = cleanAction + championBonus;
-    } else if (st.rank === 2) {
-      // 2. Oyuncu: 500 - 2.500 arası performans puanı
-      finalScore = Math.min(2500, Math.max(1250, 1100 + cleanAction));
-    } else if (st.rank === 3) {
-      // 3. Oyuncu: 500 - 2.500 arası performans puanı
-      finalScore = Math.min(1850, Math.max(800, 700 + cleanAction));
+    let rawFinal = 0;
+
+    if (typeof st.customFinalScore === "number") {
+      rawFinal = st.customFinalScore;
+    } else if (params.game === "chainReaction") {
+      if (st.rank === 1) {
+        rawFinal = 2400 + totalPlayers * 250 + Math.min(2200, cleanAction);
+      } else if (st.rank === 2) {
+        rawFinal = Math.min(1400, 900 + Math.round(cleanAction * 0.45));
+      } else if (st.rank === 3) {
+        rawFinal = Math.min(950, 600 + Math.round(cleanAction * 0.35));
+      } else {
+        rawFinal = Math.min(650, 400 + Math.round(cleanAction * 0.25));
+      }
+    } else if (params.game === "ludo") {
+      const firstPrize = totalPlayers >= 3 ? 2800 : 2200;
+      if (st.rank === 1) rawFinal = cleanAction + firstPrize;
+      else if (st.rank === 2) rawFinal = cleanAction + 1100;
+      else if (st.rank === 3) rawFinal = cleanAction + 600;
+      else rawFinal = cleanAction + 400;
+    } else if (params.game === "dotsSos") {
+      const cappedInGame = Math.min(2200, cleanAction);
+      if (st.rank === 1) rawFinal = cappedInGame + 2000;
+      else if (st.rank === 2) rawFinal = cappedInGame + 850;
+      else if (st.rank === 3) rawFinal = cappedInGame + 500;
+      else rawFinal = cappedInGame + 350;
+    } else if (params.game === "tanks") {
+      if (st.rank === 1) rawFinal = cleanAction + 2200;
+      else if (st.rank === 2) rawFinal = cleanAction + 950;
+      else if (st.rank === 3) rawFinal = cleanAction + 550;
+      else rawFinal = cleanAction + 350;
     } else {
-      // 4. Oyuncu: 500 - 2.500 arası performans puanı
-      finalScore = Math.min(1300, Math.max(500, 500 + Math.round(cleanAction * 0.8)));
+      // memoryMatch
+      if (st.rank === 1) rawFinal = cleanAction + 1800;
+      else if (st.rank === 2) rawFinal = cleanAction + 800;
+      else if (st.rank === 3) rawFinal = cleanAction + 500;
+      else rawFinal = cleanAction + 350;
     }
+
+    const finalScore = clampGameScore(params.game, rawFinal);
     const prevHigh = st.player.games?.[params.game]?.highScore ?? 0;
-    const isNewPersonalBest = !st.isBot && !st.player.isBot && finalScore > prevHigh;
+    const isNewPersonalBest =
+      !st.isBot && !st.player.isBot && finalScore > prevHigh;
     return {
       ...st,
       finalScore,

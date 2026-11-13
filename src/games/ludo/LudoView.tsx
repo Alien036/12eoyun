@@ -62,6 +62,52 @@ const START_TRACK_INDEX: Record<number, number> = {
 // Yıldızlı güvenli kareler (0, 8, 13, 21, 26, 34, 39, 47)
 const SAFE_TRACK_INDICES = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
 
+// Klasik Kızma Birader Doygun Tahta Renk Paleti
+const CLASSIC_LUDO_COLORS: Record<
+  number,
+  {
+    name: string;
+    main: string;
+    light: string;
+    dark: string;
+    rim: string;
+    laneBg: string;
+  }
+> = {
+  0: {
+    name: "Mavi",
+    main: "#3B82F6",
+    light: "#93C5FD",
+    dark: "#1D4ED8",
+    rim: "#1E3A8A",
+    laneBg: "#DBEAFE",
+  },
+  1: {
+    name: "Kırmızı",
+    main: "#EF4444",
+    light: "#FCA5A5",
+    dark: "#B91C1C",
+    rim: "#7F1D1D",
+    laneBg: "#FEE2E2",
+  },
+  2: {
+    name: "Yeşil",
+    main: "#22C55E",
+    light: "#86EFAC",
+    dark: "#15803D",
+    rim: "#14532D",
+    laneBg: "#DCFCE7",
+  },
+  3: {
+    name: "Sarı",
+    main: "#FACC15",
+    light: "#FEF08A",
+    dark: "#CA8A04",
+    rim: "#713F12",
+    laneBg: "#FEF9C3",
+  },
+};
+
 export interface LudoPawn {
   id: string;
   slotIndex: number;
@@ -71,6 +117,107 @@ export interface LudoPawn {
 }
 
 const GOAL_STEP = 56;
+
+// 3D Parlak Kızma Birader Piyonu SVG Figürü (Alt taban + konik gövde + küresel baş + parlak specular highlight)
+function Classic3DPawnSvg({
+  slotIndex,
+  pawnNumber,
+}: {
+  slotIndex: number;
+  pawnNumber: number;
+}) {
+  const c = CLASSIC_LUDO_COLORS[slotIndex % 4];
+  const gradId = `ludo_pawn_grad_${slotIndex}_${pawnNumber}`;
+  const headId = `ludo_pawn_head_${slotIndex}_${pawnNumber}`;
+
+  return (
+    <svg
+      viewBox="0 0 44 52"
+      className="h-11 w-11 drop-shadow-[0_5px_6px_rgba(15,23,42,0.55)] select-none"
+    >
+      <defs>
+        <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor={c.light} />
+          <stop offset="45%" stopColor={c.main} />
+          <stop offset="100%" stopColor={c.dark} />
+        </linearGradient>
+        <radialGradient id={headId} cx="32%" cy="28%" r="68%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="28%" stopColor={c.light} />
+          <stop offset="68%" stopColor={c.main} />
+          <stop offset="100%" stopColor={c.dark} />
+        </radialGradient>
+      </defs>
+      {/* Alt gölge halkası */}
+      <ellipse cx="22" cy="47" rx="15" ry="4" fill="rgba(15,23,42,0.38)" />
+      {/* Beyaz çerçeveli piyon kaidesi */}
+      <ellipse
+        cx="22"
+        cy="44"
+        rx="14"
+        ry="4.5"
+        fill={`url(#${gradId})`}
+        stroke="#FFFFFF"
+        strokeWidth="2"
+      />
+      {/* Konik piyon gövdesi */}
+      <path
+        d="M11 43 C13 31, 15 24, 17 20 L27 20 C29 24, 31 31, 33 43 Z"
+        fill={`url(#${gradId})`}
+        stroke="#FFFFFF"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      {/* Boyun bileziği */}
+      <ellipse
+        cx="22"
+        cy="20"
+        rx="7.2"
+        ry="2.5"
+        fill={c.light}
+        stroke="#FFFFFF"
+        strokeWidth="1.4"
+      />
+      {/* 3D Küresel Piyon Başı */}
+      <circle
+        cx="22"
+        cy="12"
+        r="8.5"
+        fill={`url(#${headId})`}
+        stroke="#FFFFFF"
+        strokeWidth="2"
+      />
+      {/* Parlak ışık yansıması (Specular Highlight) */}
+      <ellipse
+        cx="19"
+        cy="9"
+        rx="3.2"
+        ry="1.9"
+        transform="rotate(-24 19 9)"
+        fill="rgba(255,255,255,0.82)"
+      />
+      <path
+        d="M15 38 C16 30, 17.5 25, 18.5 22"
+        stroke="rgba(255,255,255,0.55)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        fill="none"
+      />
+      {/* Piyon numarası */}
+      <text
+        x="22"
+        y="37"
+        textAnchor="middle"
+        fill="#FFFFFF"
+        fontSize="11"
+        fontWeight="900"
+        style={{ paintOrder: "stroke", stroke: c.rim, strokeWidth: "2.5px" }}
+      >
+        {pawnNumber}
+      </text>
+    </svg>
+  );
+}
 
 function getPawnGlobalTrackIndex(pawn: LudoPawn): number | null {
   if (pawn.progress < 0 || pawn.progress > 50) return null;
@@ -217,14 +364,27 @@ export default function LudoView({
         return b.score - a.score;
       });
 
-      const standingsInput = slotMetrics.map((m, idx) => ({
-        slotIndex: m.slotIndex,
-        player: m.seat.player,
-        isBot: m.seat.isBot,
-        rank: idx + 1,
-        actionScore: m.score,
-        statSummary: `${m.finished}/${pawnsPerPlayer} Hedef • ${m.captures} Kırma`,
-      }));
+      const firstBonus = seats.length >= 3 ? 2800 : 2200;
+      const standingsInput = slotMetrics.map((m, idx) => {
+        const rank = idx + 1;
+        const placeBonus =
+          rank === 1
+            ? firstBonus
+            : rank === 2
+            ? 1100
+            : rank === 3
+            ? 600
+            : 400;
+        return {
+          slotIndex: m.slotIndex,
+          player: m.seat.player,
+          isBot: m.seat.isBot,
+          rank,
+          actionScore: m.score,
+          customFinalScore: m.score + placeBonus,
+          statSummary: `${m.finished}/${pawnsPerPlayer} Hedef • ${m.captures} Kırma`,
+        };
+      });
 
       const res = await recordMultiplayerMatchResult({
         game: "ludo",
@@ -258,7 +418,6 @@ export default function LudoView({
         // Kaleden başlangıç karesine çıkış
         target.progress = 0;
         sound.playPawnStep(2);
-        workingScores[slotIdx] = (workingScores[slotIdx] || 0) + 120;
         setPawns(workingPawns.map((p) => ({ ...p })));
         await new Promise((r) => window.setTimeout(r, 220));
       } else {
@@ -270,7 +429,6 @@ export default function LudoView({
           await new Promise((r) => window.setTimeout(r, 130));
           if (unmountedRef.current) return;
         }
-        workingScores[slotIdx] = (workingScores[slotIdx] || 0) + rolled * 25;
       }
 
       if (unmountedRef.current) return;
@@ -297,14 +455,16 @@ export default function LudoView({
       let reachedGoal = false;
       if (target.progress === GOAL_STEP) {
         reachedGoal = true;
-        workingScores[slotIdx] += 600;
+        // Piyonu merkeze (eve) ulaştırma: +400 puan
+        workingScores[slotIdx] = (workingScores[slotIdx] || 0) + 400;
         sound.playShimmerWave();
       }
 
       if (capturedEnemy) {
         sound.playLudoCapture();
         onComboEnergyChange?.(4);
-        workingScores[slotIdx] += 450;
+        // Rakip piyon kırma: +250 puan
+        workingScores[slotIdx] = (workingScores[slotIdx] || 0) + 250;
         workingCaptures[slotIdx] = (workingCaptures[slotIdx] || 0) + 1;
         setBoardShake(true);
         window.setTimeout(() => {
@@ -459,11 +619,10 @@ export default function LudoView({
     };
   });
 
-  // 15x15 Hücre Tipi Hesaplayıcı
+  // 15x15 Klasik Kızma Birader Hücre Hesaplayıcı (Ferah Krem/Beyaz Yürüyüş Yolu + Canlı Renkli Koridorlar)
   const renderBoardGrid = () => {
     const cells: React.ReactNode[] = [];
 
-    // Hızlı koordinat -> ana yol indeksi haritası
     const trackCoordMap = new Map<string, number>();
     MAIN_PATH_COORDS.forEach(([r, c], idx) => {
       trackCoordMap.set(`${r}-${c}`, idx);
@@ -482,47 +641,85 @@ export default function LudoView({
         const trackIdx = trackCoordMap.get(key);
         const laneOwner = homeLaneMap.get(key);
 
-        // 4 Köşe Kalesi (6x6)
         const isTopLeftBase = r < 6 && c < 6;
         const isTopRightBase = r < 6 && c > 8;
         const isBottomRightBase = r > 8 && c > 8;
         const isBottomLeftBase = r > 8 && c < 6;
         const isCenterGoal = r >= 6 && r <= 8 && c >= 6 && c <= 8;
 
-        let cellBg = "bg-slate-900/40 border-white/5";
+        // Köşe kaleleri ve merkez 3x3 hedef alanı özel katman olarak üstte çizilir
+        if (
+          isTopLeftBase ||
+          isTopRightBase ||
+          isBottomRightBase ||
+          isBottomLeftBase ||
+          isCenterGoal
+        ) {
+          cells.push(<div key={key} className="pointer-events-none" />);
+          continue;
+        }
+
+        let cellStyle: React.CSSProperties = {
+          backgroundColor: "#F8FAFC",
+          borderColor: "#CBD5E1",
+        };
         let iconContent: React.ReactNode = null;
 
-        if (isTopLeftBase) {
-          cellBg = "bg-sky-500/12 border-sky-500/20";
-        } else if (isTopRightBase) {
-          cellBg = "bg-rose-500/12 border-rose-500/20";
-        } else if (isBottomRightBase) {
-          cellBg = "bg-emerald-500/12 border-emerald-500/20";
-        } else if (isBottomLeftBase) {
-          cellBg = "bg-amber-500/12 border-amber-500/20";
-        } else if (isCenterGoal) {
-          cellBg =
-            "bg-gradient-to-br from-amber-500/30 via-fuchsia-500/25 to-cyan-500/30 border-amber-400/40";
-          if (r === 7 && c === 7) {
-            iconContent = <span className="text-lg sm:text-xl">👑</span>;
-          }
-        } else if (laneOwner !== undefined) {
-          const lt = SMARTBOARD_SLOTS[laneOwner];
-          cellBg = `${lt.bgSoftClass} ${lt.borderClass}`;
+        if (laneOwner !== undefined) {
+          const lc = CLASSIC_LUDO_COLORS[laneOwner % 4];
+          cellStyle = {
+            backgroundColor: lc.main,
+            borderColor: "#FFFFFF",
+            boxShadow: "inset 0 2px 4px rgba(255,255,255,0.35)",
+          };
         } else if (trackIdx !== undefined) {
-          cellBg = "bg-slate-900/90 border-white/15";
           if (trackIdx === 0) {
-            cellBg = "bg-sky-500/35 border-sky-400";
-          } else if (trackIdx === 13) {
-            cellBg = "bg-rose-500/35 border-rose-400";
-          } else if (trackIdx === 26) {
-            cellBg = "bg-emerald-500/35 border-emerald-400";
-          } else if (trackIdx === 39) {
-            cellBg = "bg-amber-500/35 border-amber-400";
-          }
-          if (SAFE_TRACK_INDICES.has(trackIdx)) {
+            cellStyle = {
+              backgroundColor: CLASSIC_LUDO_COLORS[0].main,
+              borderColor: "#FFFFFF",
+            };
             iconContent = (
-              <Star className="h-3 w-3 text-amber-300/75 fill-amber-300/30" />
+              <span className="text-[11px] font-black text-white drop-shadow">
+                ➔
+              </span>
+            );
+          } else if (trackIdx === 13) {
+            cellStyle = {
+              backgroundColor: CLASSIC_LUDO_COLORS[1].main,
+              borderColor: "#FFFFFF",
+            };
+            iconContent = (
+              <span className="text-[11px] font-black text-white drop-shadow">
+                ↓
+              </span>
+            );
+          } else if (trackIdx === 26) {
+            cellStyle = {
+              backgroundColor: CLASSIC_LUDO_COLORS[2].main,
+              borderColor: "#FFFFFF",
+            };
+            iconContent = (
+              <span className="text-[11px] font-black text-white drop-shadow">
+                ←
+              </span>
+            );
+          } else if (trackIdx === 39) {
+            cellStyle = {
+              backgroundColor: CLASSIC_LUDO_COLORS[3].main,
+              borderColor: "#FFFFFF",
+            };
+            iconContent = (
+              <span className="text-[11px] font-black text-slate-900 drop-shadow">
+                ↑
+              </span>
+            );
+          } else if (SAFE_TRACK_INDICES.has(trackIdx)) {
+            cellStyle = {
+              backgroundColor: "#FEF3C7",
+              borderColor: "#F59E0B",
+            };
+            iconContent = (
+              <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-400 drop-shadow-sm" />
             );
           }
         }
@@ -530,7 +727,8 @@ export default function LudoView({
         cells.push(
           <div
             key={key}
-            className={`relative flex items-center justify-center rounded-md border ${cellBg}`}
+            style={cellStyle}
+            className="relative flex items-center justify-center rounded-[5px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]"
           >
             {iconContent}
           </div>
@@ -586,99 +784,220 @@ export default function LudoView({
       }
     >
       <div className="flex h-full w-full flex-col lg:flex-row items-center justify-center gap-4 p-1 sm:p-2">
-        {/* SOL / MERKEZ: 15x15 KIZMA BİRADER AKILLI TAHTA ARENASI */}
+        {/* SOL / MERKEZ: 15x15 GERÇEK KLASİK KIZMA BİRADER TAHTASI */}
         <motion.div
           animate={
             boardShake ? { x: [-8, 8, -6, 6, -3, 3, 0] } : { x: 0 }
           }
           transition={{ duration: 0.38 }}
-          className="relative aspect-square h-full max-h-[580px] w-auto max-w-[580px] rounded-3xl border-2 border-white/15 bg-slate-950/95 p-2 shadow-2xl"
+          className="relative aspect-square h-full max-h-[580px] w-auto max-w-[580px] rounded-3xl border-[6px] border-amber-900/90 bg-[#E2E8F0] p-2 shadow-[0_20px_50px_rgba(0,0,0,0.65),inset_0_2px_6px_rgba(255,255,255,0.8)]"
         >
-          <div
-            className="grid h-full w-full gap-0.5"
-            style={{
-              gridTemplateColumns: "repeat(15, minmax(0, 1fr))",
-              gridTemplateRows: "repeat(15, minmax(0, 1fr))",
-            }}
-          >
-            {renderBoardGrid()}
+          <div className="relative h-full w-full overflow-hidden rounded-2xl border-2 border-slate-400 bg-[#CBD5E1]">
+            <div
+              className="grid h-full w-full gap-[2px] p-[2px]"
+              style={{
+                gridTemplateColumns: "repeat(15, minmax(0, 1fr))",
+                gridTemplateRows: "repeat(15, minmax(0, 1fr))",
+              }}
+            >
+              {renderBoardGrid()}
+            </div>
+
+            {/* 4 KÖŞE EV KALESİ (Canlı Mavi, Kırmızı, Yeşil, Sarı + İçleri Beyaz Çerçeveli Yuvalı) */}
+            {(
+              [
+                { slot: 0, top: "0%", left: "0%" },
+                { slot: 1, top: "0%", left: "60%" },
+                { slot: 2, top: "60%", left: "60%" },
+                { slot: 3, top: "60%", left: "0%" },
+              ] as const
+            ).map(({ slot, top, left }) => {
+              const lc = CLASSIC_LUDO_COLORS[slot];
+              const seatObj = seats.find((s) => s.slotIndex === slot);
+              return (
+                <div
+                  key={`yard-${slot}`}
+                  style={{
+                    top,
+                    left,
+                    width: "40%",
+                    height: "40%",
+                    backgroundColor: lc.main,
+                  }}
+                  className="pointer-events-none absolute p-2.5 sm:p-3.5 border-2 border-white/85 shadow-inner flex flex-col justify-between"
+                >
+                  {/* Beyaz İç Avlu */}
+                  <div className="relative flex-1 w-full rounded-2xl border-[3px] border-white bg-[#F8FAFC] shadow-[inset_0_3px_8px_rgba(15,23,42,0.16)]">
+                    {seatObj && (
+                      <div
+                        className="absolute inset-x-1.5 top-1 flex items-center justify-center gap-1 truncate rounded-full px-2 py-0.5 text-[9px] sm:text-[10px] font-black text-white shadow-sm"
+                        style={{ backgroundColor: lc.dark }}
+                      >
+                        <span>{seatObj.player.avatar}</span>
+                        <span className="truncate">{seatObj.player.name}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Kaledeki 4 Yuvarlak Piyon Yuvası (Beyaz Çerçeveli Renkli Soketler) */}
+            {Object.entries(BASE_PADS).map(([sKey, coords]) => {
+              const slotNum = Number(sKey);
+              const lc = CLASSIC_LUDO_COLORS[slotNum % 4];
+              return coords.map(([pr, pc], idx) => {
+                const leftPct = ((pc + 0.5) / 15) * 100;
+                const topPct = ((pr + 0.5) / 15) * 100;
+                return (
+                  <div
+                    key={`pad-${slotNum}-${idx}`}
+                    style={{
+                      left: `${leftPct}%`,
+                      top: `${topPct}%`,
+                      backgroundColor: lc.laneBg,
+                      borderColor: lc.main,
+                    }}
+                    className="pointer-events-none absolute z-10 -ml-4 -mt-4 h-8 w-8 rounded-full border-[3px] shadow-[inset_0_2px_4px_rgba(15,23,42,0.22)]"
+                  />
+                );
+              });
+            })}
+
+            {/* TAM MERKEZDE 4 RENKTEN OLUŞAN KLASİK ÜÇGEN BİTİŞ HEDEFİ (r: 6..8, c: 6..8) */}
+            <div
+              style={{
+                left: "40%",
+                top: "40%",
+                width: "20%",
+                height: "20%",
+              }}
+              className="pointer-events-none absolute z-10 overflow-hidden border-2 border-white shadow-md"
+            >
+              <svg viewBox="0 0 100 100" className="h-full w-full">
+                {/* Sol Üçgen: Mavi (#3B82F6) */}
+                <polygon
+                  points="0,0 50,50 0,100"
+                  fill="#3B82F6"
+                  stroke="#FFFFFF"
+                  strokeWidth="2"
+                />
+                {/* Üst Üçgen: Kırmızı (#EF4444) */}
+                <polygon
+                  points="0,0 100,0 50,50"
+                  fill="#EF4444"
+                  stroke="#FFFFFF"
+                  strokeWidth="2"
+                />
+                {/* Sağ Üçgen: Yeşil (#22C55E) */}
+                <polygon
+                  points="100,0 100,100 50,50"
+                  fill="#22C55E"
+                  stroke="#FFFFFF"
+                  strokeWidth="2"
+                />
+                {/* Alt Üçgen: Sarı (#FACC15) */}
+                <polygon
+                  points="0,100 100,100 50,50"
+                  fill="#FACC15"
+                  stroke="#FFFFFF"
+                  strokeWidth="2"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="17"
+                  fill="#FFFBEB"
+                  stroke="#F59E0B"
+                  strokeWidth="2.5"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center text-sm sm:text-base">
+                👑
+              </div>
+            </div>
+
+            {/* PİYONLAR KATMANI (Yay Fiziği ile Hareket Eden 3D Parlak Kızma Birader Piyonları) */}
+            {pawns.map((pawn) => {
+              const [r, c] = getPawnBoardCoord(pawn);
+              const isMovable =
+                phase === "pick_pawn" && movablePawnIds.includes(pawn.id);
+
+              // Aynı karedeki birden fazla piyonu hafif kaydır
+              const sameSquarePawns = pawns.filter((other) => {
+                const [or, oc] = getPawnBoardCoord(other);
+                return or === r && oc === c;
+              });
+              const stackIdx = sameSquarePawns.findIndex(
+                (o) => o.id === pawn.id
+              );
+              const stackOffset =
+                sameSquarePawns.length > 1 ? (stackIdx - 0.5) * 7 : 0;
+
+              const leftPct = ((c + 0.5) / 15) * 100;
+              const topPct = ((r + 0.5) / 15) * 100;
+
+              return (
+                <motion.button
+                  key={pawn.id}
+                  type="button"
+                  disabled={!isMovable}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    if (isMovable) {
+                      void executePawnMove(pawn, diceValue);
+                    }
+                  }}
+                  animate={{
+                    left: `calc(${leftPct}% + ${stackOffset}px)`,
+                    top: `calc(${topPct}% + ${stackOffset}px)`,
+                    scale: isMovable ? [1, 1.22, 1] : 1,
+                    y: isMovable ? [0, -5, 0] : 0,
+                  }}
+                  transition={{
+                    left: { type: "spring", stiffness: 360, damping: 26 },
+                    top: { type: "spring", stiffness: 360, damping: 26 },
+                    scale: isMovable
+                      ? { repeat: Infinity, duration: 0.72 }
+                      : { duration: 0.2 },
+                    y: isMovable
+                      ? { repeat: Infinity, duration: 0.72 }
+                      : { duration: 0.2 },
+                  }}
+                  className={`absolute z-30 -ml-[22px] -mt-[32px] flex h-12 w-11 items-center justify-center rounded-full ${
+                    isMovable
+                      ? "cursor-pointer z-40 drop-shadow-[0_0_12px_rgba(255,255,255,0.95)]"
+                      : "pointer-events-none"
+                  }`}
+                >
+                  {isMovable && (
+                    <span className="pointer-events-none absolute -bottom-1 h-4 w-8 rounded-full border-2 border-white bg-amber-300/60 animate-ping" />
+                  )}
+                  <Classic3DPawnSvg
+                    slotIndex={pawn.slotIndex}
+                    pawnNumber={pawn.pawnIndex + 1}
+                  />
+                </motion.button>
+              );
+            })}
           </div>
-
-          {/* PİYONLAR KATMANI (Yay Fiziği ile Hareket Eden 3D Taşlar) */}
-          {pawns.map((pawn) => {
-            const [r, c] = getPawnBoardCoord(pawn);
-            const isMovable =
-              phase === "pick_pawn" && movablePawnIds.includes(pawn.id);
-            const pTheme =
-              SMARTBOARD_SLOTS[pawn.slotIndex % SMARTBOARD_SLOTS.length];
-
-            // Aynı karedeki birden fazla piyonu hafif kaydır
-            const sameSquarePawns = pawns.filter((other) => {
-              const [or, oc] = getPawnBoardCoord(other);
-              return or === r && oc === c;
-            });
-            const stackIdx = sameSquarePawns.findIndex((o) => o.id === pawn.id);
-            const stackOffset =
-              sameSquarePawns.length > 1 ? (stackIdx - 0.5) * 6 : 0;
-
-            const leftPct = ((c + 0.5) / 15) * 100;
-            const topPct = ((r + 0.5) / 15) * 100;
-
-            return (
-              <motion.button
-                key={pawn.id}
-                type="button"
-                disabled={!isMovable}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  if (isMovable) {
-                    void executePawnMove(pawn, diceValue);
-                  }
-                }}
-                animate={{
-                  left: `calc(${leftPct}% + ${stackOffset}px)`,
-                  top: `calc(${topPct}% + ${stackOffset}px)`,
-                  scale: isMovable ? [1, 1.24, 1] : 1,
-                }}
-                transition={{
-                  left: { type: "spring", stiffness: 360, damping: 26 },
-                  top: { type: "spring", stiffness: 360, damping: 26 },
-                  scale: isMovable
-                    ? { repeat: Infinity, duration: 0.75 }
-                    : { duration: 0.2 },
-                }}
-                className={`absolute z-30 -ml-5 -mt-5 flex h-10 w-10 items-center justify-center rounded-full border-2 text-xs font-black text-white shadow-lg ${
-                  isMovable
-                    ? "ring-4 ring-white cursor-pointer z-40"
-                    : "pointer-events-none"
-                }`}
-                style={{
-                  background: `radial-gradient(circle at 30% 28%, #ffffff, ${pTheme.lightHex} 22%, ${pTheme.hex} 65%, ${pTheme.darkHex} 100%)`,
-                  borderColor: "#ffffff",
-                  boxShadow: `0 4px 14px ${pTheme.hex}`,
-                }}
-              >
-                {pawn.pawnIndex + 1}
-              </motion.button>
-            );
-          })}
         </motion.div>
 
-        {/* SAĞ / YAN: AKILLI TAHTA ERİŞİLEBİLİR DEV 3D ZAR KULESİ */}
-        <div className="flex w-full max-w-[300px] flex-col items-center justify-center gap-3 rounded-3xl border border-white/12 bg-slate-900/90 p-4 shadow-xl">
+        {/* SAĞ / YAN: AKILLI TAHTA ERİŞİLEBİLİR DEV 3D FİLDİŞİ ZAR KULESİ */}
+        <div className="flex w-full max-w-[300px] flex-col items-center justify-center gap-3 rounded-3xl border border-amber-300/25 bg-slate-900/92 p-4 shadow-xl">
           <div className="text-center">
             <span
               className={`inline-flex items-center gap-1 rounded-full border px-3 py-0.5 text-[10px] font-black uppercase ${activeTheme.badgeClass}`}
             >
               <Sparkles className="h-3 w-3" /> {activeTheme.label} •{" "}
-              {activeTheme.colorName}
+              {CLASSIC_LUDO_COLORS[activeSeat.slotIndex % 4].name}
             </span>
             <h3 className="mt-1 text-base font-black text-white">
               {activeSeat.player.avatar} {activeSeat.player.name}
             </h3>
           </div>
 
-          {/* 3D DÖNEN ZAR KÜPÜ (Dokunmatik Hedef >= 96x96px) */}
+          {/* 3D YUVARLATILMIŞ FİLDİŞİ ZAR KÜPÜ (Dokunmatik Hedef >= 112x112px) */}
           <motion.button
             key={diceSpinKey}
             type="button"
@@ -700,14 +1019,21 @@ export default function LudoView({
                 : { rotateX: 0, rotateY: 0, rotateZ: 0, scale: 1 }
             }
             transition={{ duration: 0.5, ease: "easeOut" }}
-            className={`relative flex h-28 w-28 items-center justify-center rounded-3xl border-2 bg-gradient-to-br from-white via-slate-100 to-slate-300 text-slate-950 shadow-[0_0_35px_rgba(255,255,255,0.35)] ${
+            className={`relative flex h-28 w-28 items-center justify-center rounded-[28px] border-[3px] text-slate-950 ${
               phase === "wait_roll" && !activeSeat.isBot
                 ? "cursor-pointer hover:scale-105"
                 : "cursor-default"
             }`}
-            style={{ borderColor: activeTheme.hex }}
+            style={{
+              borderColor: CLASSIC_LUDO_COLORS[activeSeat.slotIndex % 4].main,
+              background:
+                "radial-gradient(circle at 28% 24%, #FFFFFF 0%, #FDFBF7 48%, #E6DEC8 100%)",
+              boxShadow: `0 12px 26px rgba(0,0,0,0.45), inset 0 3px 6px #FFFFFF, inset 0 -5px 10px rgba(180,165,135,0.65), 0 0 26px ${
+                CLASSIC_LUDO_COLORS[activeSeat.slotIndex % 4].main
+              }66`,
+            }}
           >
-            {/* Zar Noktaları (Pips) */}
+            {/* Zar Noktaları (1 ve 6 Kırmızı, Diğerleri Klasik Siyah Çukur Noktalı) */}
             <div className="grid h-20 w-20 grid-cols-3 grid-rows-3 place-items-center p-1">
               {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((cellIdx) => {
                 const pipMap: Record<number, number[]> = {
@@ -719,14 +1045,19 @@ export default function LudoView({
                   6: [0, 2, 3, 5, 6, 8],
                 };
                 const show = (pipMap[diceValue] || [4]).includes(cellIdx);
+                const isRedPip = diceValue === 1 || diceValue === 6;
                 return (
                   <span
                     key={cellIdx}
-                    className={`h-3.5 w-3.5 rounded-full transition-transform ${
+                    className={` rounded-full transition-transform ${
+                      diceValue === 1 && cellIdx === 4
+                        ? "h-5 w-5"
+                        : "h-3.5 w-3.5"
+                    } ${
                       show
-                        ? diceValue === 6
-                          ? "bg-rose-600 scale-110 shadow"
-                          : "bg-slate-900"
+                        ? isRedPip
+                          ? "bg-gradient-to-b from-red-500 to-red-700 scale-110 shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)]"
+                          : "bg-gradient-to-b from-slate-800 to-slate-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]"
                         : "opacity-0"
                     }`}
                   />
@@ -737,26 +1068,26 @@ export default function LudoView({
 
           <div className="text-center text-xs font-bold text-slate-300">
             {phase === "wait_roll"
-              ? "Zara veya aşağıdaki butona tek parmakla dokun!"
+              ? "Fildişi zara veya aşağıdaki butona dokun!"
               : phase === "rolling"
-              ? "3D Zar dönüyor..."
+              ? "3D Fildişi Zar dönüyor..."
               : phase === "pick_pawn"
-              ? "Tahtadaki parlayan piyonuna dokun!"
+              ? "Tahtadaki parlayan 3D piyonuna dokun!"
               : "Piyon ilerliyor..."}
           </div>
 
-          <div className="w-full rounded-2xl border border-white/10 bg-slate-950/70 p-2.5 text-[11px] text-slate-400 space-y-1">
+          <div className="w-full rounded-2xl border border-white/10 bg-slate-950/75 p-2.5 text-[11px] text-slate-300 space-y-1">
             <div>
               ⭐ <strong className="text-amber-300">Yıldızlı Kareler:</strong>{" "}
               Güvenli bölge (taş kırılmaz).
             </div>
             <div>
-              ⚡ <strong className="text-cyan-300">Hızlı Çıkış:</strong> Sahada
-              taşın yoksa <strong>1 veya 6</strong> ile kaleden çıkarsın!
+              🎯 <strong className="text-emerald-300">Hedefe Ulaşma:</strong>{" "}
+              Eve giren piyon <strong>+400 Puan + Ekstra Zar!</strong>
             </div>
             <div>
               💥 <strong className="text-rose-300">Kırma Ödülü:</strong> Rakip
-              kırana <strong>+450 Puan + Ekstra Zar!</strong>
+              kırana <strong>+250 Puan + Ekstra Zar!</strong>
             </div>
           </div>
         </div>
@@ -764,3 +1095,4 @@ export default function LudoView({
     </SmartboardFrame>
   );
 }
+

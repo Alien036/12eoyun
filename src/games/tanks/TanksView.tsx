@@ -201,15 +201,28 @@ export default function TanksView({
 
       const standingsInput = sorted.map((t, idx) => {
         const seat = seats[t.slotIndex];
+        const rank = idx + 1;
+        const myAction = finalScores[t.slotIndex] || 0;
+        const hpLeft = Math.max(0, t.hp);
+        // 0 - 10.000 Ölçeği: Şampiyonluk +2.200 + kalan can (hp * 6)
+        const rankBonus =
+          rank === 1
+            ? 2200 + hpLeft * 6
+            : rank === 2
+            ? 950
+            : rank === 3
+            ? 550
+            : 350;
         return {
           slotIndex: t.slotIndex,
           player: seat.player,
           isBot: seat.isBot,
-          rank: idx + 1,
-          actionScore: finalScores[t.slotIndex] || 0,
-          statSummary: `${Math.max(0, t.hp)} HP Kaldı • Hasar Puanı: ${(
-            finalScores[t.slotIndex] || 0
-          ).toLocaleString("tr-TR")} P`,
+          rank,
+          actionScore: myAction,
+          customFinalScore: myAction + rankBonus,
+          statSummary: `${hpLeft} HP Kaldı • Hasar Puanı: ${myAction.toLocaleString(
+            "tr-TR"
+          )} P`,
         };
       });
 
@@ -303,15 +316,17 @@ export default function TanksView({
             elimCounterRef.current += 1;
             t.eliminatedOrder = elimCounterRef.current;
             if (t.slotIndex !== attackerSlot) {
-              nextScores[attackerSlot] = (nextScores[attackerSlot] || 0) + 550;
+              // Rakip tank imhası: +500 puan
+              nextScores[attackerSlot] = (nextScores[attackerSlot] || 0) + 500;
             }
           }
         }
       }
 
       if (totalDealt > 0) {
+        // İsabet hasarı: hasar * 3 puan
         nextScores[attackerSlot] =
-          (nextScores[attackerSlot] || 0) + totalDealt * 11;
+          (nextScores[attackerSlot] || 0) + totalDealt * 3;
         onComboEnergyChange?.(totalDealt >= 35 ? 4 : 2);
       }
 
@@ -966,3 +981,4 @@ export default function TanksView({
     </SmartboardFrame>
   );
 }
+

@@ -168,13 +168,18 @@ export default function ChessView({
       gameOverTriggeredRef.current = true;
 
       const mat = computeMaterialSummary(finalGame);
-      const speedBonus = Math.max(0, 600 - elapsedSec * 2);
+      const matBonusWhite = Math.min(500, Math.max(0, mat.advantageWhite) * 45);
+      const matBonusBlack = Math.min(
+        500,
+        Math.max(0, -mat.advantageWhite) * 45
+      );
 
       if (mode === "solo") {
+        // 0 - 10.000 Ölçeği: Kolay Bot 1.400, Orta Bot 2.600, Zor Bot 4.200 + materyal farkı (maks +500)
         const baseMap: Record<BotDifficulty, number> = {
-          easy: 1500,
-          medium: 3500,
-          hard: 6000,
+          easy: 1400,
+          medium: 2600,
+          hard: 4200,
         };
         const diffLabels: Record<BotDifficulty, string> = {
           easy: "Kolay Bot",
@@ -184,18 +189,14 @@ export default function ChessView({
 
         let earned = 0;
         if (winner === "w") {
-          earned =
-            baseMap[botDiff] +
-            Math.max(0, mat.advantageWhite) * 75 +
-            mat.whiteMaterial * 25 +
-            speedBonus;
+          earned = baseMap[botDiff] + matBonusWhite;
           sound.playVictory();
           confetti({ particleCount: 95, spread: 75, origin: { y: 0.58 } });
         } else if (winner === "draw") {
-          earned = Math.round(baseMap[botDiff] * 0.35);
+          earned = 800;
           sound.playClick();
         } else {
-          earned = Math.max(150, mat.whiteMaterial * 20);
+          earned = 250;
           sound.playGameOver();
         }
 
@@ -224,22 +225,23 @@ export default function ChessView({
           });
         }, delayModalMs);
       } else if (player2) {
+        // Sınıf Arkadaşıyla Düello: Galibiyet 3.200 + materyal farkı (maks +500), beraberlik 800, mağlubiyet 250
         let p1Earned = 0;
         let p2Earned = 0;
 
         if (winner === "w") {
-          p1Earned = 4000 + mat.whiteMaterial * 55 + speedBonus;
-          p2Earned = Math.max(200, mat.blackMaterial * 30);
+          p1Earned = 3200 + matBonusWhite;
+          p2Earned = 250;
           sound.playVictory();
           confetti({ particleCount: 95, spread: 75, origin: { y: 0.58 } });
         } else if (winner === "b") {
-          p2Earned = 4000 + mat.blackMaterial * 55 + speedBonus;
-          p1Earned = Math.max(200, mat.whiteMaterial * 30);
+          p2Earned = 3200 + matBonusBlack;
+          p1Earned = 250;
           sound.playVictory();
           confetti({ particleCount: 95, spread: 75, origin: { y: 0.58 } });
         } else {
-          p1Earned = 1500 + mat.whiteMaterial * 35;
-          p2Earned = 1500 + mat.blackMaterial * 35;
+          p1Earned = 800;
+          p2Earned = 800;
           sound.playClick();
         }
 
@@ -662,9 +664,9 @@ export default function ChessView({
         </div>
       </div>
 
-      {/* 8x8 Turnuva Satranç Tahtası (cburnett SVG + 180ms Spring Glide + Knight Arc + Capture Dust) */}
+      {/* 8x8 Klasik Ahşap/Krem Turnuva Satranç Tahtası (cburnett SVG + 180ms Spring Glide + Knight Arc + Capture Dust) */}
       <div className="my-1 flex flex-1 w-full items-center justify-center min-h-0">
-        <div className="grid w-full max-w-[min(92vw,52dvh,420px)] aspect-square grid-cols-8 grid-rows-8 overflow-hidden rounded-2xl border-2 border-amber-400/40 shadow-[0_18px_48px_rgba(0,0,0,0.75)]">
+        <div className="grid w-full max-w-[min(92vw,52dvh,420px)] aspect-square grid-cols-8 grid-rows-8 overflow-hidden rounded-2xl border-[6px] border-[#5C3A21] bg-[#452712] shadow-[0_18px_48px_rgba(0,0,0,0.78),0_0_0_2px_rgba(245,158,11,0.45)]">
           {boardMatrix.map((rowArr, rIdx) =>
             rowArr.map((piece, cIdx) => {
               const sq = `${FILES[cIdx]}${8 - rIdx}` as Square;
@@ -707,14 +709,14 @@ export default function ChessView({
                   onClick={() => handleSquareTap(sq)}
                   className={`relative flex items-center justify-center select-none cursor-pointer transition-colors ${
                     isSelected
-                      ? "bg-cyan-400/75"
+                      ? "bg-amber-300"
                       : isLast
                       ? isLight
-                        ? "bg-amber-200"
-                        : "bg-amber-600/80"
+                        ? "bg-[#F7EC74]"
+                        : "bg-[#DAC34B]"
                       : isLight
-                      ? "bg-[#eae9d2]"
-                      : "bg-[#4b7399]"
+                      ? "bg-[#FDF6E2]"
+                      : "bg-[#B58863]"
                   }`}
                 >
                   {/* Radyal Nabızlı Şah (Check) Işığı */}
@@ -754,7 +756,7 @@ export default function ChessView({
                   {cIdx === 0 && (
                     <span
                       className={`pointer-events-none absolute left-1 top-0.5 text-[9px] font-extrabold ${
-                        isLight ? "text-[#4b7399]" : "text-[#eae9d2]"
+                        isLight ? "text-[#8C5A32]" : "text-[#FDF6E2]"
                       }`}
                     >
                       {8 - rIdx}
@@ -763,7 +765,7 @@ export default function ChessView({
                   {rIdx === 7 && (
                     <span
                       className={`pointer-events-none absolute right-1 bottom-0 text-[9px] font-extrabold ${
-                        isLight ? "text-[#4b7399]" : "text-[#eae9d2]"
+                        isLight ? "text-[#8C5A32]" : "text-[#FDF6E2]"
                       }`}
                     >
                       {FILES[cIdx]}

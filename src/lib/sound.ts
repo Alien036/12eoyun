@@ -893,6 +893,38 @@ class ArcadeSoundEngine {
       osc.stop(st + 0.24);
     });
   }
+
+  // Block Blast Türkçe Gaza Getirici Söz (Hype Callout) Neşeli Zafer Tınısı
+  public playHypeCheer(tier: number = 1): void {
+    if (this.muted) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const clampedTier = Math.min(5, Math.max(1, tier));
+    const baseNotes =
+      clampedTier >= 4
+        ? [523.25, 659.25, 783.99, 1046.5, 1318.51]
+        : clampedTier >= 3
+        ? [523.25, 659.25, 783.99, 1046.5]
+        : clampedTier >= 2
+        ? [523.25, 659.25, 783.99]
+        : [587.33, 880.0];
+
+    baseNotes.forEach((freq, idx) => {
+      const start = now + 0.06 + idx * 0.048;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, start);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.04, start + 0.2);
+      g.gain.setValueAtTime(0.13, start);
+      g.gain.exponentialRampToValueAtTime(0.001, start + 0.22);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.24);
+    });
+  }
 }
 
 export const sound = new ArcadeSoundEngine();

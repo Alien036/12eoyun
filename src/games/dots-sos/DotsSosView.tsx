@@ -64,6 +64,7 @@ export default function DotsSosView({
   const [capturedCounts, setCapturedCounts] = useState<number[]>(() =>
     seats.map(() => 0)
   );
+  const [streaks, setStreaks] = useState<number[]>(() => seats.map(() => 0));
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
   const [bannerText, setBannerText] = useState<string>("");
   const [finalStandings, setFinalStandings] = useState<
@@ -111,6 +112,7 @@ export default function DotsSosView({
     setTurnIndex(0);
     setActionScores(seats.map(() => 0));
     setCapturedCounts(seats.map(() => 0));
+    setStreaks(seats.map(() => 0));
     setHLines(
       Array.from({ length: BOX_ROWS + 1 }, () => Array(BOX_COLS).fill(null))
     );
@@ -156,17 +158,25 @@ export default function DotsSosView({
           return b.score - a.score;
         });
 
-      const standingsInput = ranked.map((r, i) => ({
-        slotIndex: r.slotIndex,
-        player: r.seat.player,
-        isBot: r.seat.isBot,
-        rank: i + 1,
-        actionScore: r.score,
-        statSummary:
-          subMode === "dots"
-            ? `${r.count} Kare Mühürledi • ${r.score.toLocaleString("tr-TR")} P`
-            : `${r.count} SOS Yaptı • ${r.score.toLocaleString("tr-TR")} P`,
-      }));
+      const standingsInput = ranked.map((r, i) => {
+        const rank = i + 1;
+        const cappedInGame = Math.min(2200, r.score);
+        // Maç Galibiyeti +2.000, diğer sıralar dengeli teselli bonusu
+        const matchBonus =
+          rank === 1 ? 2000 : rank === 2 ? 850 : rank === 3 ? 500 : 350;
+        return {
+          slotIndex: r.slotIndex,
+          player: r.seat.player,
+          isBot: r.seat.isBot,
+          rank,
+          actionScore: cappedInGame,
+          customFinalScore: cappedInGame + matchBonus,
+          statSummary:
+            subMode === "dots"
+              ? `${r.count} Kare Mühürledi • ${cappedInGame.toLocaleString("tr-TR")} P`
+              : `${r.count} SOS Yaptı • ${cappedInGame.toLocaleString("tr-TR")} P`,
+        };
+      });
 
       const res = await recordMultiplayerMatchResult({
         game: "dotsSos",
@@ -220,8 +230,21 @@ export default function DotsSosView({
 
       const nextScores = [...actionScores];
       const nextCounts = [...capturedCounts];
-      nextScores[slotIdx] =
-        (nextScores[slotIdx] || 0) + 25 + newlySealed * 280;
+      const nextStreaks = [...streaks];
+
+      if (newlySealed > 0) {
+        const curStr = (nextStreaks[slotIdx] || 0) + newlySealed;
+        nextStreaks[slotIdx] = curStr;
+        // Tamamlanan kare başına +75 (seri çarpanı maksimum 1.5x, oyun içi tavan 2.200)
+        const mult = Math.min(1.5, 1 + (curStr - 1) * 0.25);
+        const pts = Math.round(newlySealed * 75 * mult);
+        nextScores[slotIdx] = Math.min(
+          2200,
+          (nextScores[slotIdx] || 0) + pts
+        );
+      } else {
+        nextStreaks[slotIdx] = 0;
+      }
       nextCounts[slotIdx] = (nextCounts[slotIdx] || 0) + newlySealed;
 
       setHLines(nextH);
@@ -229,6 +252,7 @@ export default function DotsSosView({
       setBoxes(nextB);
       setActionScores(nextScores);
       setCapturedCounts(nextCounts);
+      setStreaks(nextStreaks);
 
       if (newlySealed > 0) {
         sound.playLaserSos(newlySealed);
@@ -270,6 +294,7 @@ export default function DotsSosView({
       boxes,
       actionScores,
       capturedCounts,
+      streaks,
       finishMatch,
       onComboEnergyChange,
     ]
@@ -358,14 +383,28 @@ export default function DotsSosView({
       const sosFormed = newLasers.length;
       const nextScores = [...actionScores];
       const nextCounts = [...capturedCounts];
-      nextScores[slotIdx] =
-        (nextScores[slotIdx] || 0) + 20 + sosFormed * 320;
+      const nextStreaks = [...streaks];
+
+      if (sosFormed > 0) {
+        const curStr = (nextStreaks[slotIdx] || 0) + sosFormed;
+        nextStreaks[slotIdx] = curStr;
+        // Tamamlanan SOS başına +75 (seri çarpanı maksimum 1.5x, oyun içi tavan 2.200)
+        const mult = Math.min(1.5, 1 + (curStr - 1) * 0.25);
+        const pts = Math.round(sosFormed * 75 * mult);
+        nextScores[slotIdx] = Math.min(
+          2200,
+          (nextScores[slotIdx] || 0) + pts
+        );
+      } else {
+        nextStreaks[slotIdx] = 0;
+      }
       nextCounts[slotIdx] = (nextCounts[slotIdx] || 0) + sosFormed;
 
       setSosGrid(nextGrid);
       setSosLasers((prev) => [...prev, ...newLasers]);
       setActionScores(nextScores);
       setCapturedCounts(nextCounts);
+      setStreaks(nextStreaks);
 
       if (sosFormed > 0) {
         sound.playLaserSos(sosFormed);
@@ -408,6 +447,7 @@ export default function DotsSosView({
       selectedLetter,
       actionScores,
       capturedCounts,
+      streaks,
       finishMatch,
       onComboEnergyChange,
     ]
@@ -589,11 +629,11 @@ export default function DotsSosView({
       }
     >
       {subMode === "dots" ? (
-        /* MOD A: NEON KARE KAPMACA (GENİŞ DOKUNMATİK ÇİZGİ ALANLI MATRİS) */
+        /* MOD A: NEON KARE KAPMACA (CANLI RENKLİ TAHTA + PARLAK OYUNCU KUTULARI) */
         <div className="flex h-full w-full items-center justify-center p-2">
-          <div className="relative w-full max-w-[960px] h-full max-h-[540px] rounded-3xl border-2 border-white/15 bg-slate-950/95 p-5 sm:p-7 shadow-2xl">
+          <div className="relative w-full max-w-[960px] h-full max-h-[540px] rounded-3xl border-[4px] border-indigo-400/50 bg-gradient-to-br from-indigo-950/95 via-slate-900/95 to-purple-950/95 p-5 sm:p-7 shadow-[0_20px_50px_rgba(0,0,0,0.65)]">
             <div className="relative h-full w-full">
-              {/* Tamamlanan Kareler (Oyuncu Avatarı ve Rengiyle Mühürlenir) */}
+              {/* Tamamlanan Kareler (Oyuncu Avatarı ve Canlı Gradyan Rengiyle Mühürlenir) */}
               {boxes.map((row, br) =>
                 row.map((ownerSlot, bc) => {
                   const leftPct = (bc / BOX_COLS) * 100;
@@ -620,7 +660,7 @@ export default function DotsSosView({
                         height: `${hPct}%`,
                       }}
                     >
-                      {ownerSeat && oTheme && (
+                      {ownerSeat && oTheme ? (
                         <motion.div
                           initial={{ scale: 0.3, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
@@ -629,18 +669,20 @@ export default function DotsSosView({
                             stiffness: 420,
                             damping: 24,
                           }}
-                          className={`flex h-full w-full flex-col items-center justify-center rounded-2xl border ${oTheme.borderClass} ${oTheme.bgSoftClass}`}
+                          className={`flex h-full w-full flex-col items-center justify-center rounded-2xl border-2 border-white/80 bg-gradient-to-br ${oTheme.buttonGradient} shadow-lg`}
                           style={{
-                            boxShadow: `inset 0 0 24px ${oTheme.hex}44`,
+                            boxShadow: `0 6px 20px ${oTheme.hex}66, inset 0 2px 6px rgba(255,255,255,0.45)`,
                           }}
                         >
-                          <span className="text-2xl sm:text-3xl leading-none">
+                          <span className="text-2xl sm:text-3xl leading-none drop-shadow">
                             {ownerSeat.player.avatar}
                           </span>
-                          <span className="mt-0.5 truncate max-w-[90%] text-[10px] font-black text-white">
+                          <span className="mt-0.5 truncate max-w-[90%] text-[10px] font-black text-white drop-shadow">
                             {ownerSeat.player.name}
                           </span>
                         </motion.div>
+                      ) : (
+                        <div className="h-full w-full rounded-2xl bg-white/[0.04] border border-white/5" />
                       )}
                     </div>
                   );
@@ -768,9 +810,9 @@ export default function DotsSosView({
           </div>
         </div>
       ) : (
-        /* MOD B: SOS LAZER ARENASI (7x5 YATAY IZGARA + LAZER ÇİZGİ KATMANI) */
+        /* MOD B: SOS LAZER ARENASI (CANLI RENKLİ KARTLAR + LAZER ÇİZGİ KATMANI) */
         <div className="flex h-full w-full items-center justify-center p-2">
-          <div className="relative w-full max-w-[980px] h-full max-h-[540px] rounded-3xl border-2 border-white/15 bg-slate-950/95 p-3 sm:p-4 shadow-2xl">
+          <div className="relative w-full max-w-[980px] h-full max-h-[540px] rounded-3xl border-[4px] border-indigo-400/50 bg-gradient-to-br from-indigo-950/95 via-slate-900/95 to-purple-950/95 p-3 sm:p-4 shadow-2xl">
             <div
               className="grid h-full w-full gap-2"
               style={{
@@ -799,16 +841,16 @@ export default function DotsSosView({
                           void handlePlaceSosLetter(r, c);
                         }
                       }}
-                      className={`relative flex min-h-[54px] min-w-[54px] items-center justify-center rounded-2xl border text-2xl sm:text-3xl font-black transition select-none ${
+                      className={`relative flex min-h-[54px] min-w-[54px] items-center justify-center rounded-2xl border-2 text-2xl sm:text-3xl font-black transition select-none ${
                         filled && cTheme
-                          ? `${cTheme.borderClass} bg-slate-900 text-white`
-                          : "border-white/10 bg-slate-900/55 hover:border-white/30 text-slate-500 cursor-pointer"
+                          ? `border-white/85 bg-gradient-to-br ${cTheme.buttonGradient} text-white shadow-lg`
+                          : "border-indigo-300/25 bg-indigo-900/40 hover:border-cyan-300/70 hover:bg-indigo-800/55 text-white cursor-pointer shadow-inner"
                       }`}
                       style={
                         filled && cTheme
                           ? {
-                              color: cTheme.hex,
-                              textShadow: `0 0 14px ${cTheme.hex}`,
+                              textShadow: "0 2px 6px rgba(0,0,0,0.45)",
+                              boxShadow: `0 4px 16px ${cTheme.hex}66`,
                             }
                           : undefined
                       }

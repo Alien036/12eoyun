@@ -232,7 +232,11 @@ export default function SolitaireView({
 
   const finishGame = useCallback(
     async (won: boolean, baseScore: number) => {
-      const speedBonus = won ? Math.max(500, 4000 - elapsedSec * 8) : 0;
+      // 0 - 10.000 Ölçeği: Oyunu tamamlama ödülü +1.000 + süre bonusu Math.max(0, Math.round(900 - elapsedSec * 2.5))
+      const timeBonus = won
+        ? Math.max(0, Math.round(900 - elapsedSec * 2.5))
+        : 0;
+      const speedBonus = won ? 1000 + timeBonus : 0;
       const finalScore = baseScore + speedBonus;
 
       if (won) {
@@ -323,13 +327,13 @@ export default function SolitaireView({
     }
   };
 
-  // Sütun sonunda kapalı kart açıldıysa 3D çevir ve +50 puan ver
+  // Sütun sonunda kapalı kart açıldıysa 3D çevir ve +20 puan ver
   const revealTopIfNeeded = (col: PlayingCard[]): number => {
     if (col.length > 0 && !col[col.length - 1].faceUp) {
       const top = col[col.length - 1];
       top.faceUp = true;
       markFlipped(top.id);
-      return 50;
+      return 20;
     }
     return 0;
   };
@@ -347,7 +351,7 @@ export default function SolitaireView({
         if (canPlaceOnFoundation(card, fPile, card.suit)) {
           next.waste.pop();
           fPile.push(card);
-          next.score += 150;
+          next.score += 40;
           next.moves += 1;
           sound.playCardFoundation(fPile.length);
           pushAndApply(next);
@@ -358,7 +362,7 @@ export default function SolitaireView({
           if (canPlaceOnTableauColumn(card, next.tableau[t])) {
             next.waste.pop();
             next.tableau[t].push(card);
-            next.score += 20;
+            next.score += 5;
             next.moves += 1;
             sound.playCardFlip();
             pushAndApply(next);
@@ -379,7 +383,7 @@ export default function SolitaireView({
           if (canPlaceOnFoundation(card, fPile, card.suit)) {
             sourceCol.pop();
             fPile.push(card);
-            next.score += 150 + revealTopIfNeeded(sourceCol);
+            next.score += 40 + revealTopIfNeeded(sourceCol);
             next.moves += 1;
             sound.playCardFoundation(fPile.length);
             pushAndApply(next);
@@ -406,7 +410,7 @@ export default function SolitaireView({
             next.tableau[colIdx] = sourceCol.slice(0, cardIdx);
             next.tableau[targetColIdx].push(...movingSlice);
             const flipPts = revealTopIfNeeded(next.tableau[colIdx]);
-            next.score += flipPts > 0 ? flipPts : 20;
+            next.score += flipPts > 0 ? flipPts : 5;
             next.moves += 1;
             sound.playCardFlip();
             pushAndApply(next);
@@ -429,7 +433,7 @@ export default function SolitaireView({
         if (canPlaceOnFoundation(card, next.foundations[suit], suit)) {
           next.waste.pop();
           next.foundations[suit].push(card);
-          next.score += 150;
+          next.score += 40;
           next.moves += 1;
           sound.playCardFoundation(next.foundations[suit].length);
           pushAndApply(next);
@@ -446,7 +450,7 @@ export default function SolitaireView({
           if (canPlaceOnFoundation(card, next.foundations[suit], suit)) {
             col.pop();
             next.foundations[suit].push(card);
-            next.score += 150 + revealTopIfNeeded(col);
+            next.score += 40 + revealTopIfNeeded(col);
             next.moves += 1;
             sound.playCardFoundation(next.foundations[suit].length);
             pushAndApply(next);
@@ -468,7 +472,7 @@ export default function SolitaireView({
         if (canPlaceOnTableauColumn(card, next.tableau[targetColIdx])) {
           next.waste.pop();
           next.tableau[targetColIdx].push(card);
-          next.score += 20;
+          next.score += 5;
           next.moves += 1;
           sound.playCardFlip();
           pushAndApply(next);
@@ -489,7 +493,7 @@ export default function SolitaireView({
           next.tableau[src.colIndex] = srcCol.slice(0, src.cardIndex);
           next.tableau[targetColIdx].push(...moving);
           const flipPts = revealTopIfNeeded(next.tableau[src.colIndex]);
-          next.score += flipPts > 0 ? flipPts : 20;
+          next.score += flipPts > 0 ? flipPts : 5;
           next.moves += 1;
           sound.playCardFlip();
           pushAndApply(next);
@@ -652,7 +656,7 @@ export default function SolitaireView({
     )}`;
 
   return (
-    <div className="relative flex h-full w-full max-w-2xl flex-col justify-between touch-none select-none py-1">
+    <div className="relative flex h-full w-full max-w-2xl flex-col justify-between touch-none select-none rounded-3xl border-[6px] border-[#5C3A21] bg-gradient-to-b from-[#065f46] via-[#047857] to-[#064e3b] p-2.5 sm:p-3.5 shadow-[0_20px_50px_rgba(0,0,0,0.7),inset_0_0_40px_rgba(0,0,0,0.35)]">
       {/* Üst Kontrol ve Canlı Skor Sayacı Barı */}
       <div className="flex items-center justify-between gap-2 shrink-0">
         <motion.button

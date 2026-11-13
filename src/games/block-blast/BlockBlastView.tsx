@@ -114,6 +114,8 @@ export default function BlockBlastView({
     title: string;
     subtitle?: string;
     points: number;
+    tier: number;
+    isAllClear?: boolean;
   } | null>(null);
 
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -473,25 +475,40 @@ export default function BlockBlastView({
 
       if (move.linesCleared > 0) {
         sound.playBlockClear(move.linesCleared, move.newCombo);
+        sound.playHypeCheer(move.praiseTier);
         triggerDominoExplosion(move.clearedCells);
-        if (move.linesCleared >= 2 || move.newCombo >= 2) {
+        if (move.isAllClear) {
+          confetti({
+            particleCount: 95,
+            spread: 85,
+            origin: { y: 0.52 },
+          });
+        }
+        if (move.linesCleared >= 2 || move.newCombo >= 2 || move.isAllClear) {
           setShakeKey((k) => k + 1);
         }
         const comboSuffix =
-          move.newCombo >= 2 ? ` COMBO x${move.newCombo}` : "";
+          move.newCombo >= 2 && !move.isAllClear
+            ? ` • KOMBO x${move.newCombo}`
+            : "";
         const b = {
           id: `${Date.now()}`,
-          title: `${move.praiseText || "HARİKA!"}${comboSuffix}`,
-          subtitle:
-            move.linesCleared >= 2
-              ? `${move.linesCleared} Çizgi Eşzamanlı Patladı!`
-              : undefined,
+          title: move.praiseText || "HARİKASIN!",
+          subtitle: move.isAllClear
+            ? "Tüm Tahta Temizlendi! Muazzam Bonus!"
+            : move.linesCleared >= 2
+            ? `${move.linesCleared} Çizgi Patladı${comboSuffix}`
+            : move.newCombo >= 2
+            ? `Seri Patlatma • KOMBO x${move.newCombo}`
+            : undefined,
           points: move.totalEarned,
+          tier: move.praiseTier,
+          isAllClear: move.isAllClear,
         };
         setBanner(b);
         window.setTimeout(() => {
           setBanner((cur) => (cur?.id === b.id ? null : cur));
-        }, 1250);
+        }, 1450);
       } else {
         sound.playBlockPlace(done.piece.cellCount);
       }
@@ -739,27 +756,60 @@ export default function BlockBlastView({
             className="pointer-events-none absolute inset-0 h-full w-full rounded-2xl z-20"
           />
 
-          {/* Büyüyüp Süzülen Kombo & Övgü Yazısı */}
+          {/* Büyüyüp Yaylanan 3D Türkçe Gaza Getirici Söz (Hype Callout) */}
           <AnimatePresence>
             {banner && (
               <motion.div
                 key={banner.id}
-                initial={{ opacity: 0, y: 22, scale: 0.72 }}
-                animate={{ opacity: 1, y: -14, scale: 1.06 }}
-                exit={{ opacity: 0, y: -44, scale: 0.92 }}
-                transition={SPRING_SNAP}
-                className="pointer-events-none absolute inset-x-0 top-1/3 z-30 flex justify-center"
+                initial={{ opacity: 0, y: 26, scale: 0.4, rotate: -6 }}
+                animate={{
+                  opacity: 1,
+                  y: -16,
+                  scale: [0.4, 1.25, 1],
+                  rotate: [-6, 3, -2],
+                }}
+                exit={{ opacity: 0, y: -56, scale: 0.9, rotate: 0 }}
+                transition={{
+                  duration: 0.42,
+                  ease: "easeOut",
+                }}
+                className="pointer-events-none absolute inset-x-0 top-1/3 z-30 flex justify-center px-2"
               >
-                <div className="rounded-2xl border border-amber-300/45 bg-slate-950/92 px-5 py-2.5 text-center shadow-[0_0_35px_rgba(251,191,36,0.45)] backdrop-blur-md">
-                  <div className="text-xl sm:text-2xl font-black italic tracking-tight text-amber-300 drop-shadow">
+                <div
+                  className={`rounded-3xl border-2 px-6 py-3 text-center backdrop-blur-md ${
+                    banner.tier >= 4
+                      ? "border-amber-300 bg-gradient-to-b from-fuchsia-950/95 via-slate-950/95 to-amber-950/95 shadow-[0_0_45px_rgba(251,191,36,0.65)]"
+                      : banner.tier >= 3
+                      ? "border-rose-400 bg-gradient-to-b from-rose-950/95 to-slate-950/95 shadow-[0_0_40px_rgba(244,63,94,0.55)]"
+                      : banner.tier >= 2
+                      ? "border-cyan-300 bg-gradient-to-b from-indigo-950/95 to-slate-950/95 shadow-[0_0_38px_rgba(34,211,238,0.5)]"
+                      : "border-emerald-300/80 bg-slate-950/92 shadow-[0_0_32px_rgba(52,211,153,0.45)]"
+                  }`}
+                >
+                  <div
+                    className={`text-2xl sm:text-3xl font-black italic tracking-wider uppercase ${
+                      banner.tier >= 4
+                        ? "text-amber-300"
+                        : banner.tier >= 3
+                        ? "text-rose-300"
+                        : banner.tier >= 2
+                        ? "text-cyan-200"
+                        : "text-emerald-200"
+                    }`}
+                    style={{
+                      WebkitTextStroke: "1.5px rgba(15, 23, 42, 0.95)",
+                      textShadow:
+                        "0 3px 0 #0f172a, 0 6px 14px rgba(0,0,0,0.85), 0 0 22px rgba(251,191,36,0.55)",
+                    }}
+                  >
                     {banner.title}
                   </div>
                   {banner.subtitle && (
-                    <div className="text-[11px] font-extrabold text-cyan-300">
+                    <div className="mt-0.5 text-xs font-extrabold tracking-wide text-white/95 drop-shadow">
                       {banner.subtitle}
                     </div>
                   )}
-                  <div className="text-sm font-black text-emerald-300">
+                  <div className="mt-0.5 text-sm font-black text-amber-300 drop-shadow">
                     +{banner.points.toLocaleString("tr-TR")} Puan
                   </div>
                 </div>

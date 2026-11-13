@@ -115,11 +115,13 @@ export default function SudokuView({
       if (!difficulty) return;
       const cfg = SUDOKU_CONFIG[difficulty];
       const livesLeft = Math.max(0, 3 - currentMistakes);
+      // 0 - 10.000 Ölçeği: Tamamlama ödülü (500 / 900 / 1.400 / 2.000) + kalan can (can * 150) + süre bonusu (maks +600)
       const speedBonus = won
-        ? Math.max(400, cfg.speedBase - elapsedSec * 3)
+        ? Math.min(600, Math.max(0, Math.round(600 - elapsedSec * 1.5)))
         : 0;
-      const lifeBonus = won ? livesLeft * 350 : 0;
-      const totalBonus = speedBonus + lifeBonus;
+      const lifeBonus = won ? livesLeft * 150 : 0;
+      const completionBonus = won ? cfg.completionReward : 0;
+      const totalBonus = completionBonus + speedBonus + lifeBonus;
       const finalScore = currentScore + totalBonus;
 
       if (won) {

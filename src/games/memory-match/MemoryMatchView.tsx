@@ -196,14 +196,21 @@ export default function MemoryMatchView({
           return b.score - a.score;
         });
 
-      const standingsInput = ranked.map((r, i) => ({
-        slotIndex: r.slotIndex,
-        player: r.seat.player,
-        isBot: r.seat.isBot,
-        rank: i + 1,
-        actionScore: r.score,
-        statSummary: `${r.pairs} Çift Buldu • ${r.score.toLocaleString("tr-TR")} P`,
-      }));
+      const standingsInput = ranked.map((r, i) => {
+        const rank = i + 1;
+        // 0 - 10.000 Ölçeği: Maç Galibiyeti +1.800
+        const matchBonus =
+          rank === 1 ? 1800 : rank === 2 ? 800 : rank === 3 ? 500 : 350;
+        return {
+          slotIndex: r.slotIndex,
+          player: r.seat.player,
+          isBot: r.seat.isBot,
+          rank,
+          actionScore: r.score,
+          customFinalScore: r.score + matchBonus,
+          statSummary: `${r.pairs} Çift Buldu • ${r.score.toLocaleString("tr-TR")} P`,
+        };
+      });
 
       const res = await recordMultiplayerMatchResult({
         game: "memoryMatch",
@@ -276,8 +283,10 @@ export default function MemoryMatchView({
 
         nextPairs[slotIdx] = (nextPairs[slotIdx] || 0) + 1;
         nextStreaks[slotIdx] = nextStreak;
+        // Eşleşen çift +140 + seri bonusu (çift başına maksimum +100)
+        const streakBonus = Math.min(100, (nextStreak - 1) * 35);
         nextScores[slotIdx] =
-          (nextScores[slotIdx] || 0) + 260 * Math.min(5, nextStreak);
+          (nextScores[slotIdx] || 0) + 140 + streakBonus;
 
         setDeck(matchedDeck);
         setPairsPerSlot(nextPairs);
@@ -513,50 +522,53 @@ export default function MemoryMatchView({
                     transformStyle: "preserve-3d",
                   }}
                 >
-                  {/* KART ARKA YÜZÜ (Kapalı) */}
+                  {/* KART ARKA YÜZÜ (Kapalı - Neşeli Canlı Gradyan Tasarım) */}
                   <div
-                    className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border-2 border-indigo-400/30 bg-gradient-to-br from-slate-900 via-indigo-950/80 to-slate-950 shadow-lg hover:border-cyan-400/50 transition-colors"
+                    className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border-2 border-amber-300/75 bg-gradient-to-br from-fuchsia-600 via-indigo-600 to-cyan-500 shadow-[0_8px_20px_rgba(0,0,0,0.4),inset_0_2px_6px_rgba(255,255,255,0.45)] hover:brightness-110 transition-all"
                     style={{
                       backfaceVisibility: "hidden",
                       WebkitBackfaceVisibility: "hidden",
                     }}
                   >
-                    <span className="text-2xl sm:text-3xl opacity-75">💠</span>
-                    <span className="mt-1 text-[9px] font-black tracking-widest uppercase text-indigo-300/60">
-                      12-E
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/50 bg-white/20 shadow-inner">
+                      <span className="text-xl sm:text-2xl drop-shadow">⭐</span>
+                    </div>
+                    <span className="mt-1 text-[10px] font-black tracking-widest uppercase text-white drop-shadow">
+                      12-E ARENA
                     </span>
                   </div>
 
-                  {/* KART ÖN YÜZÜ (Açık - Keskin Vektörel İkon) */}
+                  {/* KART ÖN YÜZÜ (Açık - Ferah Krem/Beyaz Zemin & Keskin Vektörel İkon) */}
                   <div
-                    className={`absolute inset-0 flex flex-col items-center justify-center rounded-2xl border-2 p-2 shadow-xl ${
+                    className={`absolute inset-0 flex flex-col items-center justify-center rounded-2xl border-[3px] p-2 shadow-xl ${
                       ownerTheme
-                        ? `${ownerTheme.borderClass} bg-slate-900/95`
-                        : "border-white/40 bg-slate-900"
+                        ? `${ownerTheme.borderClass} bg-gradient-to-b from-white to-slate-100`
+                        : "border-amber-400 bg-gradient-to-b from-white to-amber-50"
                     }`}
                     style={{
                       backfaceVisibility: "hidden",
                       WebkitBackfaceVisibility: "hidden",
                       transform: "rotateY(180deg)",
                       boxShadow: ownerTheme
-                        ? `0 0 22px ${ownerTheme.hex}55, inset 0 0 18px ${ownerTheme.hex}33`
-                        : `0 0 18px ${card.colorHex}44`,
+                        ? `0 0 24px ${ownerTheme.hex}88, inset 0 2px 6px rgba(255,255,255,0.9)`
+                        : `0 8px 22px rgba(0,0,0,0.35)`,
                     }}
                   >
                     <IconComp
                       className="h-8 w-8 sm:h-11 sm:w-11"
                       style={{
                         color: card.colorHex,
-                        filter: `drop-shadow(0 0 10px ${card.colorHex})`,
+                        filter: `drop-shadow(0 2px 6px ${card.colorHex}66)`,
                       }}
                     />
-                    <span className="mt-1 text-[10px] sm:text-xs font-black text-white">
+                    <span className="mt-1 text-[10px] sm:text-xs font-black text-slate-900">
                       {card.label}
                     </span>
 
                     {ownerSeat && ownerTheme && (
                       <span
-                        className={`absolute right-1.5 top-1.5 rounded-full border px-1.5 py-0.5 text-[10px] font-black ${ownerTheme.badgeClass}`}
+                        className={`absolute right-1.5 top-1.5 rounded-full border px-1.5 py-0.5 text-[10px] font-black shadow-sm bg-slate-900 text-white`}
+                        style={{ borderColor: ownerTheme.hex }}
                       >
                         {ownerSeat.player.avatar}
                       </span>
@@ -571,3 +583,4 @@ export default function MemoryMatchView({
     </SmartboardFrame>
   );
 }
+

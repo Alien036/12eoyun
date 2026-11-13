@@ -165,17 +165,52 @@ export default function ChainReactionView({
       });
 
       const orderedSlots = [winnerSlot, ...others];
+      const winnerMoves = Math.max(1, movesMade[winnerSlot] || 1);
+      // Hamle verimliliği bonusu: Az hamlede tahtayı fethedene maksimum +600 bonus
+      const moveEfficiencyBonus = Math.min(
+        600,
+        Math.max(0, Math.round(720 - winnerMoves * 18))
+      );
+
       const standingInputs = orderedSlots.map((slotIdx, rankZero) => {
         const seat = seats[slotIdx];
+        const rank = rankZero + 1;
+        const myAction = latestScores[slotIdx] || 0;
+        let customFinalScore = 0;
+
+        if (rank === 1) {
+          customFinalScore =
+            2400 +
+            seats.length * 250 +
+            moveEfficiencyBonus +
+            Math.min(1800, myAction);
+        } else if (rank === 2) {
+          customFinalScore = Math.min(
+            1400,
+            Math.max(850, 800 + Math.round(myAction * 0.45))
+          );
+        } else if (rank === 3) {
+          customFinalScore = Math.min(
+            950,
+            Math.max(550, 520 + Math.round(myAction * 0.35))
+          );
+        } else {
+          customFinalScore = Math.min(
+            650,
+            Math.max(400, 400 + Math.round(myAction * 0.25))
+          );
+        }
+
         return {
           slotIndex: slotIdx,
           player: seat.player,
           isBot: seat.isBot,
-          rank: rankZero + 1,
-          actionScore: latestScores[slotIdx] || 0,
-          statSummary: `${orbCounts[slotIdx] || 0} Atom Küresi • Aksiyon: ${(
-            latestScores[slotIdx] || 0
-          ).toLocaleString("tr-TR")} P`,
+          rank,
+          actionScore: myAction,
+          customFinalScore,
+          statSummary: `${orbCounts[slotIdx] || 0} Atom Küresi • Aksiyon: ${myAction.toLocaleString(
+            "tr-TR"
+          )} P`,
         };
       });
 
@@ -187,7 +222,7 @@ export default function ChainReactionView({
         setFinalStandings(res);
       }
     },
-    [seats, countOrbsPerSlot]
+    [seats, countOrbsPerSlot, movesMade]
   );
 
   // Sıradaki hücreye küre bırak ve zincirleme reaksiyonu çalıştır (Sonsuz döngü korumalı!)
@@ -219,9 +254,11 @@ export default function ChainReactionView({
       setBoard(cloneBoard(workingGrid));
 
       const workingScores = [...actionScores];
-      workingScores[slotIdx] = (workingScores[slotIdx] || 0) + 35;
+      // Hamle başına yerleştirme +10 puan; bir turdaki rakip hücre ele geçirme bonusu en fazla +150 ile sınırlı!
+      workingScores[slotIdx] = (workingScores[slotIdx] || 0) + 10;
       setActionScores([...workingScores]);
 
+      let capturedBonusThisTurn = 0;
       let workingEliminated = [...eliminatedSlots];
       let waveDepth = 0;
       const MAX_SAFE_WAVES = 55; // Sonsuz döngü emniyet kilidi
@@ -273,8 +310,8 @@ export default function ChainReactionView({
         await new Promise((res) => window.setTimeout(res, 210));
         if (unmountedRef.current) return;
 
-        // Patlamaları komşulara dağıt ve rakip küreleri kendi rengine dönüştür
-        let convertedOrbs = 0;
+        // Patlamaları komşulara dağıt ve rakip hücreleri kendi rengine dönüştür
+        let capturedEnemyCellsInWave = 0;
         for (const u of unstable) {
           const cell = workingGrid[u.r][u.c];
           cell.count -= cell.capacity;
@@ -289,15 +326,21 @@ export default function ChainReactionView({
           for (const [nr, nc] of neighbors) {
             const target = workingGrid[nr][nc];
             if (target.owner !== null && target.owner !== slotIdx) {
-              convertedOrbs += target.count;
+              capturedEnemyCellsInWave += 1;
             }
             target.owner = slotIdx;
             target.count += 1;
           }
         }
 
-        workingScores[slotIdx] +=
-          unstable.length * 85 * Math.min(5, waveDepth) + convertedOrbs * 45;
+        // Her hamlede ele geçirilen rakip hücrelerden kazanılan puan en fazla +150 ile sınırlı (çarpanlı küre puanı YOK)
+        const remainingTurnCap = Math.max(0, 150 - capturedBonusThisTurn);
+        const waveGain = Math.min(
+          remainingTurnCap,
+          capturedEnemyCellsInWave * 25
+        );
+        capturedBonusThisTurn += waveGain;
+        workingScores[slotIdx] += waveGain;
 
         setFlyingOrbs([]);
         setExplodingCoords(new Set());
@@ -642,3 +685,4 @@ export default function ChainReactionView({
     </SmartboardFrame>
   );
 }
+
