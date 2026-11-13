@@ -20,7 +20,10 @@ import {
   type PlayerDoc,
 } from "@/lib/firestore";
 import { sound } from "@/lib/sound";
-import { Buckshot3DEngine } from "./Buckshot3DEngine";
+import {
+  Buckshot3DEngine,
+  type CrateDealEntry,
+} from "./Buckshot3DEngine";
 
 export type ShellType = "live" | "blank";
 
@@ -47,7 +50,7 @@ export interface BuckshotItemMeta {
 export const BUCKSHOT_ITEMS: Record<BuckshotItemKey, BuckshotItemMeta> = {
   magnifier: {
     key: "magnifier",
-    name: "Büyüteç",
+    name: "BÜYÜTEÇ",
     shortName: "Büyüteç",
     icon: "🔍",
     desc: "Namludaki sıradaki fişeğin DOLU mu BOŞ mu olduğunu gizlice gösterir.",
@@ -55,66 +58,66 @@ export const BUCKSHOT_ITEMS: Record<BuckshotItemKey, BuckshotItemMeta> = {
   },
   handsaw: {
     key: "handsaw",
-    name: "El Testeresi",
+    name: "EL TESTERESİ",
     shortName: "Testere",
     icon: "🪚",
-    desc: "Namluyu keser! Bu atış DOLU çıkarsa 2x Hasar (2⚡) verir.",
+    desc: "Namluyu keser; bu atış DOLU çıkarsa 2⚡ çift hasar vurur.",
     accentClass: "border-red-500/70 bg-red-950/75 text-red-200",
   },
   handcuffs: {
     key: "handcuffs",
-    name: "Kelepçe",
+    name: "KELEPÇE",
     shortName: "Kelepçe",
     icon: "🔗",
-    desc: "Rakibin 3D bileklerini kelepçeler; rakip sıradaki 1 tam turunu pas geçer.",
+    desc: "Rakibin ellerini kilitler; rakip bir sonraki sırasını pas geçer.",
     accentClass: "border-slate-300/60 bg-slate-900/80 text-slate-200",
   },
   soda: {
     key: "soda",
-    name: "Teneke İçecek",
+    name: "TENEKE İÇECEK",
     shortName: "Teneke",
     icon: "🥫",
-    desc: "Pompalıyı kurup namludaki 3D fişeği ateşlemeden masaya fırlatır; sıran sende kalır!",
+    desc: "Namludaki fişeği ateşlemeden dışarı fırlatır, sıra sende kalır.",
     accentClass: "border-sky-400/60 bg-sky-950/75 text-sky-200",
   },
   sedative: {
     key: "sedative",
-    name: "Şarj Tüpü (+1⚡)",
+    name: "ŞARJ TÜPÜ",
     shortName: "+1⚡ Tüp",
     icon: "🔋",
-    desc: "3D monitöre +1⚡ yeşil LED şarj barı ekler (Kesik Kablo modunda çalışmaz).",
+    desc: "Defibrilatöre +1⚡ can doldurur (Kesik Kablo modunda çalışmaz).",
     accentClass: "border-emerald-400/60 bg-emerald-950/75 text-emerald-200",
   },
   inverter: {
     key: "inverter",
-    name: "Dönüştürücü",
+    name: "DÖNÜŞTÜRÜCÜ",
     shortName: "Inverter",
     icon: "🔄",
-    desc: "Namludaki fişeğin kutbunu gizlice tersine çevirir (DOLU ↔ BOŞ)!",
+    desc: "Namludaki fişeğin kutbunu tersine çevirir (DOLU ⇄ BOŞ).",
     accentClass: "border-purple-400/60 bg-purple-950/75 text-purple-200",
   },
   burnerPhone: {
     key: "burnerPhone",
-    name: "Gizli Telefon",
+    name: "GİZLİ TELEFON",
     shortName: "Telefon",
     icon: "📱",
-    desc: "Şarjördeki gelecekteki rastgele bir fişeğin sırasını ve rengini fısıldar.",
+    desc: "Şarjörün ilerisindeki rastgele bir fişeğin sırasını ve rengini fısıldar.",
     accentClass: "border-amber-400/60 bg-amber-950/75 text-amber-200",
   },
   adrenaline: {
     key: "adrenaline",
-    name: "Adrenalin",
+    name: "ADRENALİN",
     shortName: "Adrenalin",
     icon: "💉",
-    desc: "10 sn içinde masanın karşı tarafındaki rakip 3D eşyalardan birini çalıp anında kullanmanı sağlar!",
+    desc: "Karşı tarafın masasındaki bir eşyayı çalıp anında kullanmanı sağlar.",
     accentClass: "border-rose-400/70 bg-rose-950/75 text-rose-200",
   },
   expiredMed: {
     key: "expiredMed",
-    name: "Bozuk İlaç",
+    name: "BOZUK İLAÇ",
     shortName: "Bozuk İlaç",
     icon: "💊",
-    desc: "%50 ihtimalle +2⚡ şarj verir, %50 ihtimalle sarsıntıyla -1⚡ can götürür!",
+    desc: "%50 şansla +2⚡ can verir, %50 şansla zehirleyip -1⚡ can götürür.",
     accentClass: "border-lime-400/60 bg-lime-950/75 text-lime-200",
   },
 };
@@ -211,6 +214,13 @@ export default function BuckshotView({
   // Sıra ve kilitler (1 = Oyuncu 1, 2 = Krupiye veya Oyuncu 2)
   const [turn, setTurn] = useState<1 | 2>(1);
   const [isAnimating, setIsAnimating] = useState<boolean>(true);
+  const [isDealingAnimation, setIsDealingAnimation] = useState<boolean>(true);
+
+  // Sandıktan masaya yeni inen eşyanın yan panelde kehribar parlaması için vurgu anahtarı
+  const [recentLandedKeyP1, setRecentLandedKeyP1] =
+    useState<BuckshotItemKey | null>(null);
+  const [recentLandedKeyP2, setRecentLandedKeyP2] =
+    useState<BuckshotItemKey | null>(null);
 
   // Pompalı ve Şarjör durumu
   const [chamber, setChamber] = useState<ShellType[]>([]);
@@ -387,7 +397,7 @@ export default function BuckshotView({
     chamber,
   ]);
 
-  // Yeni Şarjör + 3D Eşya Dağıtımı Başlat (%100 Kriptografik Rastgele)
+  // Yeni Şarjör + 3D Demir Eşya Sandığı Dağıtım Sekansı Başlat (%100 Kriptografik Rastgele & Sıfır Işınlanma!)
   const startNewLoad = useCallback(
     (
       nextTurn: 1 | 2,
@@ -398,12 +408,14 @@ export default function BuckshotView({
     ) => {
       clearPendingLoadTimers();
       setIsAnimating(true);
+      setIsDealingAnimation(true);
       setGunAim("neutral");
       setGunPickedUpBy(null);
       setIsSawedOff(false);
       setSecretPeek(null);
       setAdrenalineStealSeat(null);
       setChamber([]);
+      setRevealPreview(null);
 
       aiMemoryRef.current = {
         knownCurrent: null,
@@ -427,71 +439,124 @@ export default function BuckshotView({
         ...Array(blankCount).fill("blank"),
       ];
 
-      // 3) Eşya Dağıtımı: Her yüklemede 2 ila 4 adet rastgele seçilir; her oyuncunun her yuvası için bağımsız cryptoRandom ile çekilir
+      // 3) Eşya Dağıtımı: Her yüklemede 2 ila 4 adet rastgele seçilir; ışınlanmadan 3D Demir Sandıktan tek tek çıkar!
       const itemCountToDeal = cryptoRandInt(2, 4);
+      const deals: CrateDealEntry[] = [];
 
-      const dealInto8Slots = (
-        existing: (BuckshotItemKey | null)[]
+      const prepareCrateDeals = (
+        existing: (BuckshotItemKey | null)[],
+        ownerSeat: 1 | 2
       ): (BuckshotItemKey | null)[] => {
-        const next = [...existing];
-        while (next.length < 8) next.push(null);
+        const base = [...existing];
+        while (base.length < 8) base.push(null);
         let added = 0;
         for (let i = 0; i < 8 && added < itemCountToDeal; i++) {
-          if (next[i] === null) {
+          if (base[i] === null) {
             const randIdx = Math.floor(cryptoRandom() * ALL_ITEM_KEYS.length);
-            next[i] = ALL_ITEM_KEYS[randIdx];
+            const chosenKey = ALL_ITEM_KEYS[randIdx];
+            base[i] = chosenKey;
+            deals.push({
+              ownerSeat,
+              slotIndex: i,
+              itemKey: chosenKey,
+            });
             added++;
           }
         }
-        return next;
+        return base;
       };
 
-      const nextP1Tray = dealInto8Slots(currentP1Items);
-      const nextP2Tray = dealInto8Slots(currentP2Items);
-      setP1Items(nextP1Tray);
-      setP2Items(nextP2Tray);
+      // Başlangıçta mevcut eşyaları koru (Yeni eşyalar sandıktan çıkıp tebeşir kareye değdiği an eklenecek!)
+      const workingP1 = [...currentP1Items];
+      while (workingP1.length < 8) workingP1.push(null);
+      const workingP2 = [...currentP2Items];
+      while (workingP2.length < 8) workingP2.push(null);
 
-      setRevealPreview({
-        live: liveCount,
-        blank: blankCount,
-        shells: trayDisplayShells,
-      });
+      setP1Items([...workingP1]);
+      setP2Items([...workingP2]);
+
+      prepareCrateDeals(workingP1, 1);
+      prepareCrateDeals(workingP2, 2);
+
       setCrtBanner(
-        `YENİ ŞARJÖR (${totalShells} FİŞEK): ${liveCount} KIRMIZI (DOLU) • ${blankCount} MAVİ (BOŞ)`
+        `3D DEMİR EŞYA SANDIĞI YÜKSELİYOR (+${itemCountToDeal} EŞYA)`
       );
       setCrtSubText(
-        `Kameralar 3D mermi tepsisine odaklandı. Masaya +${itemCountToDeal} yeni 3D eşya bırakıldı.`
+        "Eşyalar 3D demir sandıktan tek tek çıkarılıp tebeşir karelere diziliyor..."
       );
-      sound.playCrtBeep(840);
 
-      // 3.2 Saniye 3D Mermi Tepsisi Yakın Çekimi -> cryptoShuffle ile Tam Karıştırma -> Pompalıya Sürme
-      const timer1 = setTimeout(() => {
-        setRevealPreview(null);
-        // Gösterim tepsisindeki sıralı diziyi KESİNLİKLE doğrudan kullanma; kriptografik Fisher-Yates ile karıştır!
-        const shuffledChamber = cryptoShuffle(cryptoShuffle([...trayDisplayShells]));
-        setChamber(shuffledChamber);
-        setCrtBanner("FİŞEKLER KARIŞTIRILDI VE 3D POMPALIYA SÜRÜLÜYOR...");
+      const runShellRevealAndLoad = () => {
+        setRecentLandedKeyP1(null);
+        setRecentLandedKeyP2(null);
+        setRevealPreview({
+          live: liveCount,
+          blank: blankCount,
+          shells: trayDisplayShells,
+        });
+        setCrtBanner(
+          `YENİ ŞARJÖR (${totalShells} FİŞEK): ${liveCount} KIRMIZI (DOLU) • ${blankCount} MAVİ (BOŞ)`
+        );
+        setCrtSubText(
+          "3D mermi kutusu yandan kayarak açıldı. Kırmızı ve mavi fişekleri dikkatle say!"
+        );
+        sound.playCrtBeep(840);
 
-        const rackSteps = Math.min(4, shuffledChamber.length);
-        for (let s = 0; s < rackSteps; s++) {
-          const rackTimer = setTimeout(() => {
-            sound.playShotgunRack();
-          }, s * 230);
-          loadTimersRef.current.push(rackTimer);
-        }
-
-        const turnTimer = setTimeout(() => {
-          setTurn(nextTurn);
-          setIsAnimating(false);
-          const activeName = nextTurn === 1 ? player1.name : p2Name;
-          setCrtBanner(`SIRA SENDE: ${activeName.toUpperCase()}`);
-          setCrtSubText(
-            "Masadaki 3D eşyalara dokunabilir veya 3D pompalı tüfeğe dokunup ateş edebilirsin!"
+        // 2.6 Saniye 3D Mermi Kutusu Gösterimi -> cryptoShuffle ile Tam Karıştırma -> Tek Tek Namluya Sürme
+        const timer1 = setTimeout(() => {
+          setRevealPreview(null);
+          const shuffledChamber = cryptoShuffle(
+            cryptoShuffle([...trayDisplayShells])
           );
-        }, rackSteps * 230 + 260);
-        loadTimersRef.current.push(turnTimer);
-      }, 3200);
-      loadTimersRef.current.push(timer1);
+          setChamber(shuffledChamber);
+          setCrtBanner("FİŞEKLER KARIŞTIRILDI VE 3D POMPALIYA SÜRÜLÜYOR...");
+
+          engineRef.current?.triggerChamberLoadSequence(trayDisplayShells);
+
+          const rackSteps = Math.min(4, shuffledChamber.length);
+          for (let s = 0; s < rackSteps; s++) {
+            const rackTimer = setTimeout(() => {
+              sound.playShotgunRack();
+            }, s * 220);
+            loadTimersRef.current.push(rackTimer);
+          }
+
+          const turnTimer = setTimeout(() => {
+            setTurn(nextTurn);
+            setIsDealingAnimation(false);
+            setIsAnimating(false);
+            const activeName = nextTurn === 1 ? player1.name : p2Name;
+            setCrtBanner(`SIRA SENDE: ${activeName.toUpperCase()}`);
+            setCrtSubText(
+              "Masadaki 3D eşyalara dokunabilir veya 3D pompalı tüfeğe dokunup ateş edebilirsin!"
+            );
+          }, rackSteps * 220 + 280);
+          loadTimersRef.current.push(turnTimer);
+        }, 2650);
+        loadTimersRef.current.push(timer1);
+      };
+
+      if (engineRef.current && deals.length > 0) {
+        engineRef.current.dealItemsFromCrate(
+          deals,
+          (ownerSeat, slotIdx, itemKey) => {
+            if (ownerSeat === 1) {
+              workingP1[slotIdx] = itemKey;
+              setP1Items([...workingP1]);
+              setRecentLandedKeyP1(itemKey);
+            } else {
+              workingP2[slotIdx] = itemKey;
+              setP2Items([...workingP2]);
+              setRecentLandedKeyP2(itemKey);
+            }
+          },
+          () => {
+            runShellRevealAndLoad();
+          }
+        );
+      } else {
+        // Fallback (eğer tüm slotlar doluysa)
+        runShellRevealAndLoad();
+      }
     },
     [clearPendingLoadTimers, player1.name, p2Name]
   );
@@ -1390,7 +1455,8 @@ export default function BuckshotView({
   // 3D KANVAS ÜZERİNDE BÖLÜNMÜŞ EKRAN (DUAL-VIEWPORT) RAYCAST DOKUNMA ALGILAMA
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (isAnimating || matchOver || chamber.length === 0) return;
+      if (isAnimating || isDealingAnimation || matchOver || chamber.length === 0)
+        return;
       if (mode === "solo" && turn === 2) return;
 
       const hit = engineRef.current?.raycastFromPointer(e.clientX, e.clientY);
@@ -1462,6 +1528,7 @@ export default function BuckshotView({
     },
     [
       isAnimating,
+      isDealingAnimation,
       matchOver,
       chamber.length,
       mode,
@@ -1624,6 +1691,129 @@ export default function BuckshotView({
     ? revealPreview.blank
     : chamber.length - liveRemaining;
 
+  // Ekranın Sol ve Sağ Dış Kenarlarına Dinamik "Envanter Eşya Rehberi" Sütunu Çizen Yardımcı Fonksiyon
+  // (Ortadaki 3D masayı, tüfeği ve rakip maskesini ASLA kapatmaz — pointer-events-none, ince CRT/amber temalı)
+  const renderSideInventoryGuide = (
+    ownerSeat: 1 | 2,
+    side: "left" | "right",
+    panelTitle: string,
+    isThreatPanel: boolean = false
+  ) => {
+    const rawList = ownerSeat === 1 ? p1Items : p2Items;
+    const recentFlashKey =
+      ownerSeat === 1 ? recentLandedKeyP1 : recentLandedKeyP2;
+
+    // Aynı eşyadan masada birden fazla varsa grupla ve yanına x2, x3 rozeti koy
+    const groupedMap = new Map<BuckshotItemKey, number>();
+    rawList.forEach((k) => {
+      if (k) {
+        groupedMap.set(k, (groupedMap.get(k) ?? 0) + 1);
+      }
+    });
+    const groupedEntries = Array.from(groupedMap.entries());
+    const totalCount = rawList.filter((k) => k !== null).length;
+
+    return (
+      <div
+        className={`pointer-events-none absolute top-24 z-20 flex flex-col gap-1.5 ${
+          side === "left" ? "left-2.5 sm:left-3" : "right-2.5 sm:right-3"
+        } w-[162px] sm:w-[192px] max-h-[calc(100%-7.5rem)] overflow-hidden`}
+      >
+        {/* Başlık Şeridi */}
+        <div
+          className={`flex items-center justify-between rounded-xl border px-2.5 py-1 backdrop-blur-sm ${
+            isThreatPanel
+              ? "border-red-500/45 bg-stone-950/85 text-red-300"
+              : "border-amber-500/45 bg-stone-950/85 text-amber-300"
+          }`}
+        >
+          <span className="truncate text-[9px] font-black tracking-wider uppercase font-mono">
+            {panelTitle}
+          </span>
+          <span className="ml-1 rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-mono font-black text-stone-200">
+            {totalCount}/8
+          </span>
+        </div>
+
+        {/* Eşya Listesi veya "ENVANTER BOŞ" */}
+        {groupedEntries.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="rounded-xl border border-stone-800/85 bg-black/65 px-2.5 py-1.5 text-center font-mono text-[9px] font-bold tracking-widest text-stone-500 backdrop-blur-sm"
+          >
+            ENVANTER BOŞ
+          </motion.div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <AnimatePresence initial={false}>
+              {groupedEntries.map(([itemKey, count]) => {
+                const meta = BUCKSHOT_ITEMS[itemKey];
+                const isFreshlyLanded = recentFlashKey === itemKey;
+                return (
+                  <motion.div
+                    key={itemKey}
+                    layout
+                    initial={{
+                      opacity: 0,
+                      x: side === "left" ? -16 : 16,
+                      scale: 0.94,
+                    }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{
+                      opacity: 0,
+                      x: side === "left" ? -18 : 18,
+                      scale: 0.9,
+                    }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 380,
+                      damping: 26,
+                    }}
+                    className={`rounded-xl border px-2 py-1.5 backdrop-blur-sm transition-colors duration-300 ${
+                      isFreshlyLanded
+                        ? "border-amber-400 bg-amber-500/25 shadow-[0_0_18px_rgba(245,158,11,0.45)]"
+                        : isThreatPanel
+                        ? "border-red-900/65 bg-black/75"
+                        : "border-stone-700/80 bg-black/75"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="text-xs leading-none">
+                          {meta.icon}
+                        </span>
+                        <span
+                          className={`truncate text-[10px] font-black tracking-tight ${
+                            isFreshlyLanded
+                              ? "text-amber-200"
+                              : isThreatPanel
+                              ? "text-red-200"
+                              : "text-amber-300"
+                          }`}
+                        >
+                          {meta.name}
+                        </span>
+                      </div>
+                      {count > 1 && (
+                        <span className="shrink-0 rounded-md border border-amber-400/60 bg-amber-500/25 px-1.5 py-0.2 font-mono text-[9px] font-black text-amber-200">
+                          x{count}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-[9px] leading-snug text-stone-300/95">
+                      {meta.desc}
+                    </p>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Her bir yarı ekran (veya tek ekran) için HUD ve Kontrolleri çizen yardımcı fonksiyon
   // (Alt 2D Eşya Barı ve Orta Büyük HTML Butonlar kaldırıldı — %100 3D Masa & Karakter Etkileşimi!)
   const renderViewportHUD = (seat: 1 | 2) => {
@@ -1656,6 +1846,23 @@ export default function BuckshotView({
             backgroundSize: "100% 100%, 100% 3px, 3px 3px",
           }}
         />
+
+        {/* SOL VE SAĞ KENAR DİNAMİK "ENVANTER EŞYA REHBERİ" PANELLERİ */}
+        {mode === "solo" ? (
+          <>
+            {renderSideInventoryGuide(1, "left", "📦 SENİN ENVANTERİN", false)}
+            {renderSideInventoryGuide(
+              2,
+              "right",
+              "⚠️ KRUPİYE TEHDİTLERİ",
+              true
+            )}
+          </>
+        ) : seat === 1 ? (
+          renderSideInventoryGuide(1, "left", "📦 1. OYUNCU EŞYALARI", false)
+        ) : (
+          renderSideInventoryGuide(2, "right", "📦 2. OYUNCU EŞYALARI", false)
+        )}
 
         {/* Vurulan Oyuncunun Yarı Ekranında Kan Kırmızısı Elektroşok Kararması */}
         <AnimatePresence>

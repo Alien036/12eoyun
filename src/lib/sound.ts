@@ -1310,6 +1310,178 @@ class ArcadeSoundEngine {
       osc.stop(t + 0.038);
     });
   }
+
+  // Demir Eşya Sandığı: Hidrolik Yükseliş Motor Uğultusu + Mekanik Kilit
+  public playCrateHydraulic(): void {
+    if (this.muted) return;
+    this.vibrate([12, 24, 14]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Katman 1: Hidrolik piston / servo motor yükseliş uğultusu
+    const hum = ctx.createOscillator();
+    const humGain = ctx.createGain();
+    hum.type = "sawtooth";
+    hum.frequency.setValueAtTime(68, now);
+    hum.frequency.exponentialRampToValueAtTime(148, now + 0.38);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(420, now);
+    humGain.gain.setValueAtTime(0.01, now);
+    humGain.gain.linearRampToValueAtTime(0.18, now + 0.08);
+    humGain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+    hum.connect(filter);
+    filter.connect(humGain);
+    humGain.connect(ctx.destination);
+    hum.start(now);
+    hum.stop(now + 0.44);
+
+    // Katman 2: Masa hizasına mekanik oturma kilidi (*TAK!*)
+    const lock = ctx.createOscillator();
+    const lockGain = ctx.createGain();
+    lock.type = "triangle";
+    lock.frequency.setValueAtTime(520, now + 0.36);
+    lock.frequency.exponentialRampToValueAtTime(140, now + 0.43);
+    lockGain.gain.setValueAtTime(0.24, now + 0.36);
+    lockGain.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
+    lock.connect(lockGain);
+    lockGain.connect(ctx.destination);
+    lock.start(now + 0.36);
+    lock.stop(now + 0.45);
+  }
+
+  // Demir Eşya Sandığı: Mandal Açılışı ve Demir Kapak *KLANK!* Sesi
+  public playCrateLidOpen(): void {
+    if (this.muted) return;
+    this.vibrate([18, 22]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Katman 1: Ön metal mandal tıkırtısı
+    const latch = ctx.createOscillator();
+    const lGain = ctx.createGain();
+    latch.type = "square";
+    latch.frequency.setValueAtTime(1750, now);
+    latch.frequency.exponentialRampToValueAtTime(620, now + 0.032);
+    lGain.gain.setValueAtTime(0.18, now);
+    lGain.gain.exponentialRampToValueAtTime(0.001, now + 0.038);
+    latch.connect(lGain);
+    lGain.connect(ctx.destination);
+    latch.start(now);
+    latch.stop(now + 0.04);
+
+    // Katman 2: Ağır demir kapak menteşe ve *KLANK!* çarpması
+    const clank = ctx.createOscillator();
+    const cGain = ctx.createGain();
+    clank.type = "triangle";
+    clank.frequency.setValueAtTime(980, now + 0.09);
+    clank.frequency.exponentialRampToValueAtTime(240, now + 0.24);
+    cGain.gain.setValueAtTime(0.26, now + 0.09);
+    cGain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+    clank.connect(cGain);
+    cGain.connect(ctx.destination);
+    clank.start(now + 0.09);
+    clank.stop(now + 0.28);
+
+    // Katman 3: Metalik rezonans tınısı
+    const ring = ctx.createOscillator();
+    const rGain = ctx.createGain();
+    ring.type = "sine";
+    ring.frequency.setValueAtTime(1420, now + 0.095);
+    ring.frequency.exponentialRampToValueAtTime(860, now + 0.26);
+    rGain.gain.setValueAtTime(0.12, now + 0.095);
+    rGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    ring.connect(rGain);
+    rGain.connect(ctx.destination);
+    ring.start(now + 0.095);
+    ring.stop(now + 0.29);
+  }
+
+  // Demir Eşya Sandığı: Kapağın Sertçe Kapanması (*BAM!*) ve Geri Çekiliş
+  public playCrateLidSlam(): void {
+    if (this.muted) return;
+    this.vibrate([28, 18]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Katman 1: Sert demir kapak çarpması (*BAM!*)
+    const slam = ctx.createOscillator();
+    const sGain = ctx.createGain();
+    slam.type = "sawtooth";
+    slam.frequency.setValueAtTime(320, now);
+    slam.frequency.exponentialRampToValueAtTime(52, now + 0.16);
+    sGain.gain.setValueAtTime(0.32, now);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    slam.connect(sGain);
+    sGain.connect(ctx.destination);
+    slam.start(now);
+    slam.stop(now + 0.19);
+
+    // Katman 2: Metalik kapak darbe gürültüsü
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.createNoiseBuffer(ctx, 0.08);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(1100, now);
+    const nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(0.24, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
+    noise.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ctx.destination);
+    noise.start(now);
+
+    // Katman 3: Hidrolik aşağı iniş uğultusu
+    const down = ctx.createOscillator();
+    const dGain = ctx.createGain();
+    down.type = "sine";
+    down.frequency.setValueAtTime(140, now + 0.12);
+    down.frequency.exponentialRampToValueAtTime(55, now + 0.42);
+    dGain.gain.setValueAtTime(0.14, now + 0.12);
+    dGain.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
+    down.connect(dGain);
+    dGain.connect(ctx.destination);
+    down.start(now + 0.12);
+    down.stop(now + 0.45);
+  }
+
+  // Eşyanın Masadaki Tebeşir Kareye Bırakılma Sesi (*TOK!* — Ahşap + Metal Bırakma Darbesi)
+  public playItemPlaceThud(): void {
+    if (this.muted) return;
+    this.vibrate(14);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Katman 1: Tok masa gövde darbesi
+    const thud = ctx.createOscillator();
+    const tGain = ctx.createGain();
+    thud.type = "triangle";
+    thud.frequency.setValueAtTime(210, now);
+    thud.frequency.exponentialRampToValueAtTime(58, now + 0.095);
+    tGain.gain.setValueAtTime(0.28, now);
+    tGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    thud.connect(tGain);
+    tGain.connect(ctx.destination);
+    thud.start(now);
+    thud.stop(now + 0.11);
+
+    // Katman 2: Metalik/sert cisim temas tıkırtısı
+    const clink = ctx.createOscillator();
+    const cGain = ctx.createGain();
+    clink.type = "sine";
+    clink.frequency.setValueAtTime(1180, now);
+    clink.frequency.exponentialRampToValueAtTime(380, now + 0.036);
+    cGain.gain.setValueAtTime(0.14, now);
+    cGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+    clink.connect(cGain);
+    cGain.connect(ctx.destination);
+    clink.start(now);
+    clink.stop(now + 0.045);
+  }
 }
 
 export const sound = new ArcadeSoundEngine();

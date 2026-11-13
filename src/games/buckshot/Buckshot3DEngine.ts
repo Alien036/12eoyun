@@ -55,6 +55,43 @@ interface ActiveItemAnim {
   itemKey: BuckshotItemKey;
   startPos: THREE.Vector3;
   targetPos: THREE.Vector3;
+  tossPos: THREE.Vector3;
+  progress: number;
+}
+
+export interface CrateDealEntry {
+  ownerSeat: 1 | 2;
+  slotIndex: number;
+  itemKey: BuckshotItemKey;
+}
+
+interface CrateDealFlight {
+  ownerSeat: 1 | 2;
+  slotIndex: number;
+  itemKey: BuckshotItemKey;
+  mesh: THREE.Group;
+  curve: THREE.QuadraticBezierCurve3;
+  targetPos: THREE.Vector3;
+  targetRotY: number;
+  startTime: number;
+  duration: number;
+  landed: boolean;
+}
+
+interface ItemCrateRig {
+  root: THREE.Group;
+  lidPivot: THREE.Group;
+  frontLatch: THREE.Mesh;
+}
+
+interface DustRingEffect {
+  mesh: THREE.Mesh;
+  progress: number;
+}
+
+interface FlyingChamberShell {
+  mesh: THREE.Group;
+  curve: THREE.QuadraticBezierCurve3;
   progress: number;
 }
 
@@ -1505,6 +1542,31 @@ export class Buckshot3DEngine {
   private inspectingChamberTimer: number = 0;
 
   private shellTrayGroup: THREE.Group;
+  private shellTrayBoxGroup!: THREE.Group;
+  private shellTrayTargetX: number = -3.45;
+  private flyingChamberShells: FlyingChamberShell[] = [];
+
+  // 3D Demir Eşya Sandıkları (ItemCrateGroup) ve Adım Adım Dağıtım Sekansı
+  private crateP1!: ItemCrateRig;
+  private crateP2!: ItemCrateRig;
+  private crateSequenceActive: boolean = false;
+  private crateSequenceElapsed: number = 0;
+  private crateRiseDur: number = 0.45;
+  private crateLidOpenDur: number = 0.3;
+  private crateRetractDur: number = 0.45;
+  private crateTotalItemsDur: number = 0;
+  private crateLidSoundPlayed: boolean = false;
+  private crateSlamSoundPlayed: boolean = false;
+  private crateFlights: CrateDealFlight[] = [];
+  private onCrateItemLandedCb:
+    | ((ownerSeat: 1 | 2, slotIndex: number, itemKey: BuckshotItemKey) => void)
+    | null = null;
+  private onCrateAllDoneCb: (() => void) | null = null;
+
+  private p1SlotBounce: number[] = Array(8).fill(0);
+  private p2SlotBounce: number[] = Array(8).fill(0);
+  private dustRings: DustRingEffect[] = [];
+
   private p1Leds: THREE.Mesh[] = [];
   private p2Leds: THREE.Mesh[] = [];
   private cutWireSparkMesh!: THREE.Mesh;
@@ -1599,9 +1661,15 @@ export class Buckshot3DEngine {
     this.severedBarrelOnTable.visible = false;
     this.scene.add(this.severedBarrelOnTable);
 
-    this.shellTrayGroup = new THREE.Group();
-    this.shellTrayGroup.position.set(-2.32, 0.98, 0);
+    this.shellTrayGroup = this.build3DShellTrayBox();
+    this.shellTrayGroup.position.set(-3.45, 0.98, 0);
     this.scene.add(this.shellTrayGroup);
+
+    // Her iki oyuncunun masa kenarına 3D Kapaklı Demir Eşya Sandığı (ItemCrateGroup) ekle
+    this.crateP1 = this.buildItemCrate(1);
+    this.crateP2 = this.buildItemCrate(2);
+    this.scene.add(this.crateP1.root);
+    this.scene.add(this.crateP2.root);
 
     this.avatarP2 = createAvatarRig(false, 1);
     this.avatarP1 = createAvatarRig(true, 2);
@@ -2774,13 +2842,363 @@ export class Buckshot3DEngine {
     return piece;
   }
 
+  // ============================================================================
+  // 3D MERMİ KUTUSU (SHELL BOX) — YANDAN KAYARAK AÇILIR
+  // ============================================================================
+  private build3DShellTrayBox(): THREE.Group {
+    const root = new THREE.Group();
+
+    const frameGroup = new THREE.Group();
+    const darkMetal = new THREE.MeshStandardMaterial({
+      color: 0x1c1917,
+      metalness: 0.85,
+      roughness: 0.42,
+    });
+    const innerRecess = new THREE.MeshBasicMaterial({ color: 0x050608 });
+
+    // Dış metal kasa ve iç karanlık yuva
+    const baseBox = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 0.08, 2.08),
+      darkMetal
+    );
+    baseBox.position.y = -0.02;
+    baseBox.castShadow = true;
+    frameGroup.add(baseBox);
+
+    const cavity = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.03, 1.94),
+      innerRecess
+    );
+    cavity.position.y = 0.015;
+    frameGroup.add(cavity);
+
+    // Yan demir ray çerçeveleri
+    [-0.19, 0.19].forEach((rx) => {
+      const rail = new THREE.Mesh(
+        new THREE.BoxGeometry(0.04, 0.11, 2.08),
+        darkMetal
+      );
+      rail.position.set(rx, 0.01, 0);
+      frameGroup.add(rail);
+    });
+
+    this.shellTrayBoxGroup = frameGroup;
+    root.add(frameGroup);
+    return root;
+  }
+
+  // ============================================================================
+  // 3D KAPAKLI DEMİR EŞYA SANDIĞI (ItemCrateGroup)
+  // ============================================================================
+  private buildItemCrate(ownerSeat: 1 | 2): ItemCrateRig {
+    const root = new THREE.Group();
+    const zSign = ownerSeat === 1 ? 1 : -1;
+    // Başlangıçta masa altındaki karanlık haznede gizli durur
+    root.position.set(0, 0.22, zSign * 2.68);
+    if (ownerSeat === 2) {
+      root.rotation.y = Math.PI;
+    }
+    root.visible = false;
+
+    const rustTex = createRustyMetalTextures();
+    const outerSteelMat = new THREE.MeshStandardMaterial({
+      map: rustTex.map,
+      bumpMap: rustTex.bumpMap,
+      bumpScale: 0.03,
+      color: 0x292524,
+      metalness: 0.82,
+      roughness: 0.48,
+    });
+    const rivetIronMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      metalness: 0.88,
+      roughness: 0.35,
+    });
+    const brassLatchMat = new THREE.MeshStandardMaterial({
+      color: 0xd97706,
+      metalness: 0.86,
+      roughness: 0.28,
+    });
+    const hollowDarkMat = new THREE.MeshBasicMaterial({ color: 0x040507 });
+
+    // Sandık dış duvarları (İçi boş karanlık oyuklu — hollow dark interior!)
+    const crateW = 0.92;
+    const crateH = 0.42;
+    const crateD = 0.64;
+    const wallT = 0.055;
+
+    // Alt taban + karanlık iç zemin
+    const bottomPlate = new THREE.Mesh(
+      new THREE.BoxGeometry(crateW, wallT, crateD),
+      outerSteelMat
+    );
+    bottomPlate.position.y = -crateH / 2;
+    root.add(bottomPlate);
+
+    const innerPit = new THREE.Mesh(
+      new THREE.BoxGeometry(crateW - wallT * 2, 0.04, crateD - wallT * 2),
+      hollowDarkMat
+    );
+    innerPit.position.y = -crateH / 2 + 0.035;
+    root.add(innerPit);
+
+    // Ön ve arka çelik duvarlar
+    const frontWall = new THREE.Mesh(
+      new THREE.BoxGeometry(crateW, crateH, wallT),
+      outerSteelMat
+    );
+    frontWall.position.set(0, 0, crateD / 2 - wallT / 2);
+    frontWall.castShadow = true;
+
+    const backWall = new THREE.Mesh(
+      new THREE.BoxGeometry(crateW, crateH, wallT),
+      outerSteelMat
+    );
+    backWall.position.set(0, 0, -crateD / 2 + wallT / 2);
+    backWall.castShadow = true;
+
+    // Sol ve sağ çelik duvarlar
+    const leftWall = new THREE.Mesh(
+      new THREE.BoxGeometry(wallT, crateH, crateD - wallT * 2),
+      outerSteelMat
+    );
+    leftWall.position.set(-crateW / 2 + wallT / 2, 0, 0);
+    leftWall.castShadow = true;
+
+    const rightWall = new THREE.Mesh(
+      new THREE.BoxGeometry(wallT, crateH, crateD - wallT * 2),
+      outerSteelMat
+    );
+    rightWall.position.set(crateW / 2 - wallT / 2, 0, 0);
+    rightWall.castShadow = true;
+
+    // Karanlık iç duvar kaplaması (Kapak açıldığında içi derin karanlık görünsün)
+    const innerLiner = new THREE.Mesh(
+      new THREE.BoxGeometry(
+        crateW - wallT * 1.9,
+        crateH - 0.04,
+        crateD - wallT * 1.9
+      ),
+      new THREE.MeshBasicMaterial({ color: 0x050608, side: THREE.BackSide })
+    );
+    innerLiner.position.y = 0.01;
+
+    root.add(frontWall, backWall, leftWall, rightWall, innerLiner);
+
+    // Köşe demir destek kuşakları ve perçinler
+    const rivetGeo = new THREE.SphereGeometry(0.02, 8, 8);
+    [-0.4, -0.2, 0, 0.2, 0.4].forEach((rx) => {
+      const rvF = new THREE.Mesh(rivetGeo, rivetIronMat);
+      rvF.position.set(rx, crateH / 2 - 0.05, crateD / 2 + 0.005);
+      const rvB = new THREE.Mesh(rivetGeo, rivetIronMat);
+      rvB.position.set(rx, crateH / 2 - 0.05, -crateD / 2 - 0.005);
+      root.add(rvF, rvB);
+    });
+
+    // Ön Metal Mandal (Front Latch)
+    const frontLatch = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.14, 0.045),
+      brassLatchMat
+    );
+    frontLatch.position.set(0, crateH / 2 - 0.03, crateD / 2 + 0.025);
+    root.add(frontLatch);
+
+    // Arka menteşeden dönen 3D Üst Demir Kapak (lidPivot)
+    const lidPivot = new THREE.Group();
+    lidPivot.position.set(0, crateH / 2, -crateD / 2 + wallT / 2);
+
+    const lidPlate = new THREE.Mesh(
+      new THREE.BoxGeometry(crateW + 0.02, 0.055, crateD + 0.02),
+      outerSteelMat
+    );
+    lidPlate.position.set(0, 0.025, crateD / 2 - wallT / 2);
+    lidPlate.castShadow = true;
+    lidPivot.add(lidPlate);
+
+    // Kapak üstü kabartma çelik takviye çıtaları ve uyarı şeridi
+    [-0.28, 0.28].forEach((bx) => {
+      const rib = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07, 0.03, crateD - 0.06),
+        rivetIronMat
+      );
+      rib.position.set(bx, 0.062, crateD / 2 - wallT / 2);
+      lidPivot.add(rib);
+    });
+
+    const handleBar = new THREE.Mesh(
+      new THREE.TorusGeometry(0.08, 0.016, 8, 14, Math.PI),
+      brassLatchMat
+    );
+    handleBar.rotation.x = -Math.PI / 2;
+    handleBar.position.set(0, 0.06, crateD - 0.08);
+    lidPivot.add(handleBar);
+
+    root.add(lidPivot);
+
+    return { root, lidPivot, frontLatch };
+  }
+
+  // ============================================================================
+  // ADIM ADIM SANDIKTAN EŞYA ÇIKIŞ SEKANSI (dealItemsFromCrate)
+  // ============================================================================
+  public dealItemsFromCrate(
+    deals: CrateDealEntry[],
+    onEachItemLanded: (
+      ownerSeat: 1 | 2,
+      slotIndex: number,
+      itemKey: BuckshotItemKey
+    ) => void,
+    onAllComplete: () => void
+  ): void {
+    // Önceki uçuş meşlerini temizle
+    this.crateFlights.forEach((f) => this.scene.remove(f.mesh));
+    this.crateFlights = [];
+
+    if (deals.length === 0) {
+      onAllComplete();
+      return;
+    }
+
+    this.onCrateItemLandedCb = onEachItemLanded;
+    this.onCrateAllDoneCb = onAllComplete;
+    this.crateSequenceActive = true;
+    this.crateSequenceElapsed = 0;
+    this.crateLidSoundPlayed = false;
+    this.crateSlamSoundPlayed = false;
+
+    // Her iki oyuncunun sandığını masa altındaki başlangıç konumuna hazırla
+    const hasP1Deals = deals.some((d) => d.ownerSeat === 1);
+    const hasP2Deals = deals.some((d) => d.ownerSeat === 2);
+
+    this.crateP1.root.visible = hasP1Deals;
+    this.crateP1.root.position.y = 0.24;
+    this.crateP1.lidPivot.rotation.x = 0;
+    this.crateP1.frontLatch.rotation.x = 0;
+
+    this.crateP2.root.visible = hasP2Deals;
+    this.crateP2.root.position.y = 0.24;
+    this.crateP2.lidPivot.rotation.x = 0;
+    this.crateP2.frontLatch.rotation.x = 0;
+
+    // Aşama 1 Sesi: Hidrolik yükseliş uğultusu
+    sound.playCrateHydraulic();
+
+    // Eşyaları P1 ve P2 sırasıyla adım adım (her adım ~0.40 sn) planla
+    const p1Deals = deals.filter((d) => d.ownerSeat === 1);
+    const p2Deals = deals.filter((d) => d.ownerSeat === 2);
+    const maxSteps = Math.max(p1Deals.length, p2Deals.length);
+    const itemBaseStart = this.crateRiseDur + this.crateLidOpenDur; // 0.45 + 0.30 = 0.75 sn
+    const stepInterval = 0.4; // Her eşya ~0.40 sn
+
+    for (let step = 0; step < maxSteps; step++) {
+      const stepTime = itemBaseStart + step * stepInterval;
+      const pair: CrateDealEntry[] = [];
+      if (p1Deals[step]) pair.push(p1Deals[step]);
+      if (p2Deals[step]) pair.push(p2Deals[step]);
+
+      pair.forEach((entry, subIdx) => {
+        const isP1 = entry.ownerSeat === 1;
+        const startPos = new THREE.Vector3(
+          0,
+          0.92,
+          isP1 ? 2.68 : -2.68
+        );
+        const targetPos = (
+          isP1
+            ? this.p1SlotPositions[entry.slotIndex]
+            : this.p2SlotPositions[entry.slotIndex]
+        ).clone();
+
+        // Sandık içinden masa karesine parabolik Bezier yay rotası
+        const midControl = new THREE.Vector3(
+          targetPos.x * 0.55,
+          1.78,
+          (startPos.z + targetPos.z) * 0.5
+        );
+        const curve = new THREE.QuadraticBezierCurve3(
+          startPos,
+          midControl,
+          targetPos
+        );
+
+        const mesh = create3DItemModel(entry.itemKey);
+        mesh.position.copy(startPos);
+        mesh.scale.setScalar(0.72);
+        mesh.visible = false; // Sırası gelene kadar sandığın içinde gizli
+        this.scene.add(mesh);
+
+        this.crateFlights.push({
+          ownerSeat: entry.ownerSeat,
+          slotIndex: entry.slotIndex,
+          itemKey: entry.itemKey,
+          mesh,
+          curve,
+          targetPos,
+          targetRotY: isP1 ? 0 : Math.PI,
+          startTime: stepTime + subIdx * 0.08,
+          duration: 0.4,
+          landed: false,
+        });
+      });
+    }
+
+    this.crateTotalItemsDur = maxSteps * stepInterval + 0.12;
+  }
+
+  // Eşya tebeşir kareye oturduğunda çıkan 3D toz halkası (Dust Ring)
+  private spawnDustRing(pos: THREE.Vector3): void {
+    const ringGeo = new THREE.RingGeometry(0.14, 0.24, 20);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xd6d3d1,
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.rotation.x = -Math.PI / 2;
+    ringMesh.position.set(pos.x, 0.972, pos.z);
+    this.scene.add(ringMesh);
+    this.dustRings.push({ mesh: ringMesh, progress: 0 });
+  }
+
+  // Mermi tepsisindeki fişekleri tek tek pompalı tüfeğin namlusuna sürme animasyonu
+  public triggerChamberLoadSequence(shells: ShellType[]): void {
+    // Mevcut tepsideki fişekleri sırayla namlu haznesine uçur
+    const count = Math.min(shells.length, 8);
+    for (let i = 0; i < count; i++) {
+      const shType = shells[i];
+      const startPos = new THREE.Vector3(
+        -2.32,
+        1.06,
+        -0.82 + i * 0.24
+      );
+      const endPos = new THREE.Vector3(0, 1.09, 0.05);
+      const ctrlPos = new THREE.Vector3(-1.1, 1.58, -0.35 + i * 0.08);
+      const curve = new THREE.QuadraticBezierCurve3(startPos, ctrlPos, endPos);
+
+      setTimeout(() => {
+        if (this.disposed) return;
+        this.pumpOffsetZ = -0.24;
+        const flyingMesh = this.create3DShellMesh(shType);
+        flyingMesh.position.copy(startPos);
+        this.scene.add(flyingMesh);
+        this.flyingChamberShells.push({
+          mesh: flyingMesh,
+          curve,
+          progress: 0,
+        });
+      }, i * 165);
+    }
+  }
+
   public syncState(next: Buckshot3DStateSnapshot): void {
     const prevSawed = this.currentState.isSawedOff;
     this.currentState = next;
 
     if (this.sawingTimer <= 0) {
       this.frontBarrelGroup.visible = !next.isSawedOff;
-      this.cutBarrelRingMesh.visible = next.isSawedOff;
+      this.cutBarrelRingMesh.visible = !next.isSawedOff ? false : true;
       if (!this.fallingBarrelPiece) {
         this.severedBarrelOnTable.visible = next.isSawedOff;
       }
@@ -2855,16 +3273,22 @@ export class Buckshot3DEngine {
     const revHash = next.revealShells ? next.revealShells.join(",") : "none";
     if (revHash !== this.lastRevealHash) {
       this.lastRevealHash = revHash;
-      while (this.shellTrayGroup.children.length > 0) {
-        const ch = this.shellTrayGroup.children[0];
-        this.shellTrayGroup.remove(ch);
+      // Sadece mermi çocuklarını temizle, shellTrayBoxGroup kasasını koru
+      for (let i = this.shellTrayGroup.children.length - 1; i >= 0; i--) {
+        const ch = this.shellTrayGroup.children[i];
+        if (ch !== this.shellTrayBoxGroup) {
+          this.shellTrayGroup.remove(ch);
+        }
       }
       if (next.revealShells && next.revealShells.length > 0) {
+        this.shellTrayTargetX = -2.32;
         next.revealShells.forEach((shType, idx) => {
           const shMesh = this.create3DShellMesh(shType);
           shMesh.position.set(0, 0.08, -0.82 + idx * 0.24);
           this.shellTrayGroup.add(shMesh);
         });
+      } else {
+        this.shellTrayTargetX = -3.45;
       }
     }
 
@@ -3098,12 +3522,20 @@ export class Buckshot3DEngine {
         ? new THREE.Vector3(0, 1.32, 0.25)
         : new THREE.Vector3(0, 1.62, userSeat === 1 ? 1.85 : -1.85);
 
+    const sideSign = startVec.x < 0 ? -1 : 1;
+    const tossVec = new THREE.Vector3(
+      sideSign * 4.2,
+      -0.65,
+      userSeat === 1 ? 1.6 : -1.6
+    );
+
     this.activeItemAnim = {
       mesh: animModel,
       userSeat,
       itemKey,
       startPos: startVec.clone(),
       targetPos: targetVec,
+      tossPos: tossVec,
       progress: 0,
     };
 
@@ -3332,6 +3764,178 @@ export class Buckshot3DEngine {
       mat.opacity = pulseOpacity;
     });
 
+    // 2B. 3D Mermi Kutusunun Yandan Kayarak Açılıp Kapanması ve Namluya Sürülen Fişekler
+    this.shellTrayGroup.position.x = THREE.MathUtils.lerp(
+      this.shellTrayGroup.position.x,
+      this.shellTrayTargetX,
+      dt * 9.5
+    );
+
+    for (let i = this.flyingChamberShells.length - 1; i >= 0; i--) {
+      const fs = this.flyingChamberShells[i];
+      fs.progress += dt * 4.2;
+      const t = Math.min(1, fs.progress);
+      fs.curve.getPoint(t, fs.mesh.position);
+      fs.mesh.rotation.y = t * Math.PI * 0.5;
+      fs.mesh.scale.setScalar(1 - t * 0.25);
+      if (fs.progress >= 1) {
+        this.scene.remove(fs.mesh);
+        this.flyingChamberShells.splice(i, 1);
+      }
+    }
+
+    // 2C. 3D Demir Eşya Sandığı (ItemCrateGroup) 4 Aşamalı Dağıtım Sekansı
+    let activeCrateGrabP1: THREE.Vector3 | null = null;
+    let activeCrateGrabP2: THREE.Vector3 | null = null;
+
+    if (this.crateSequenceActive) {
+      this.crateSequenceElapsed += dt;
+      const tSeq = this.crateSequenceElapsed;
+      const openEnd = this.crateRiseDur + this.crateLidOpenDur; // 0.75s
+      const itemsEnd = openEnd + this.crateTotalItemsDur;
+      const totalEnd = itemsEnd + this.crateRetractDur;
+
+      // Aşama 1 (0.00 - 0.45 sn): Mekanik Yükseliş (Hidrolik)
+      if (tSeq <= this.crateRiseDur) {
+        const p = Math.min(1, tSeq / this.crateRiseDur);
+        const easeOut = 1 - Math.pow(1 - p, 3);
+        const curY = THREE.MathUtils.lerp(0.24, 0.94, easeOut);
+        this.crateP1.root.position.y = curY;
+        this.crateP2.root.position.y = curY;
+      }
+      // Aşama 2 (0.45 - 0.75 sn): Mandal Kurtulması & Demir Kapak Açılışı (-115°)
+      else if (tSeq <= openEnd) {
+        this.crateP1.root.position.y = 0.94;
+        this.crateP2.root.position.y = 0.94;
+        if (!this.crateLidSoundPlayed) {
+          this.crateLidSoundPlayed = true;
+          sound.playCrateLidOpen();
+        }
+        const p = Math.min(1, (tSeq - this.crateRiseDur) / this.crateLidOpenDur);
+        // Yaylanarak -115 dereceye (-2.007 rad) açılış
+        const backOvershoot =
+          1 + 1.7 * Math.pow(p - 1, 3) + 0.7 * Math.pow(p - 1, 2);
+        const lidAngle = -2.007 * Math.min(1.08, backOvershoot);
+        this.crateP1.lidPivot.rotation.x = lidAngle;
+        this.crateP2.lidPivot.rotation.x = lidAngle;
+        this.crateP1.frontLatch.rotation.x = 0.85 * p;
+        this.crateP2.frontLatch.rotation.x = 0.85 * p;
+      }
+      // Aşama 3: Eşyaların Tek Tek Sandıktan Çıkıp Masaya Konması
+      else if (tSeq <= itemsEnd) {
+        this.crateP1.root.position.y = 0.94;
+        this.crateP2.root.position.y = 0.94;
+        this.crateP1.lidPivot.rotation.x = -2.007;
+        this.crateP2.lidPivot.rotation.x = -2.007;
+      }
+      // Aşama 4 (Son 0.45 sn): Kapağın Sertçe Kapanması (*BAM!*) ve Masa Altına Geri Çekilme
+      else if (tSeq <= totalEnd) {
+        if (!this.crateSlamSoundPlayed) {
+          this.crateSlamSoundPlayed = true;
+          sound.playCrateLidSlam();
+        }
+        const p = Math.min(1, (tSeq - itemsEnd) / this.crateRetractDur);
+        const slamP = Math.min(1, p * 2.8);
+        const lidAngle = THREE.MathUtils.lerp(-2.007, 0, slamP);
+        this.crateP1.lidPivot.rotation.x = lidAngle;
+        this.crateP2.lidPivot.rotation.x = lidAngle;
+        this.crateP1.frontLatch.rotation.x = THREE.MathUtils.lerp(0.85, 0, slamP);
+        this.crateP2.frontLatch.rotation.x = THREE.MathUtils.lerp(0.85, 0, slamP);
+
+        if (p > 0.32) {
+          const downP = (p - 0.32) / 0.68;
+          const curY = THREE.MathUtils.lerp(0.94, 0.22, downP * downP);
+          this.crateP1.root.position.y = curY;
+          this.crateP2.root.position.y = curY;
+        }
+      } else {
+        // Sekans tamamlandı
+        this.crateP1.root.visible = false;
+        this.crateP2.root.visible = false;
+        this.crateSequenceActive = false;
+        const doneCb = this.onCrateAllDoneCb;
+        this.onCrateAllDoneCb = null;
+        doneCb?.();
+      }
+
+      // Sandıktan çıkan her bir eşyanın QuadraticBezierCurve3 parabolik uçuşunu güncelle
+      for (const fl of this.crateFlights) {
+        if (fl.landed) continue;
+        if (tSeq < fl.startTime) continue;
+
+        fl.mesh.visible = true;
+        const rawP = (tSeq - fl.startTime) / fl.duration;
+        const p = Math.min(1, rawP);
+        const smoothP = 1 - Math.pow(1 - p, 2.2);
+
+        fl.curve.getPoint(smoothP, fl.mesh.position);
+        // Scale 0.72 -> 1.0
+        const sc = THREE.MathUtils.lerp(0.72, 1.0, smoothP);
+        fl.mesh.scale.setScalar(sc);
+
+        // Havada hafif dönüş
+        fl.mesh.rotation.y =
+          fl.targetRotY + (1 - smoothP) * (fl.ownerSeat === 1 ? 1.35 : -1.35);
+        fl.mesh.rotation.z = Math.sin(smoothP * Math.PI) * 0.22;
+
+        // 3D eldivenli elin eşyayı sandıktan kavrayıp masaya bırakma hedefi
+        if (fl.ownerSeat === 1) {
+          activeCrateGrabP1 = fl.mesh.position.clone();
+        } else {
+          activeCrateGrabP2 = fl.mesh.position.clone();
+        }
+
+        if (rawP >= 1) {
+          fl.landed = true;
+          this.scene.remove(fl.mesh);
+          sound.playItemPlaceThud();
+          this.spawnDustRing(fl.targetPos);
+          if (fl.ownerSeat === 1) {
+            this.p1SlotBounce[fl.slotIndex] = 0.36;
+          } else {
+            this.p2SlotBounce[fl.slotIndex] = 0.36;
+          }
+          this.onCrateItemLandedCb?.(fl.ownerSeat, fl.slotIndex, fl.itemKey);
+        }
+      }
+    }
+
+    // 2D. Masaya Yeni Oturan Eşyaların Mikro Sekmesi (Damped Bounce) ve Toz Halkası
+    for (let i = 0; i < 8; i++) {
+      if (this.p1SlotBounce[i] > 0) {
+        this.p1SlotBounce[i] = Math.max(0, this.p1SlotBounce[i] - dt);
+        const b = this.p1SlotBounce[i] / 0.36;
+        const m1 = this.p1ItemMeshes[i];
+        if (m1) {
+          const bounceY = Math.abs(Math.sin(b * Math.PI * 2.5)) * b * 0.14;
+          m1.position.y = this.p1SlotPositions[i].y + bounceY;
+        }
+      }
+      if (this.p2SlotBounce[i] > 0) {
+        this.p2SlotBounce[i] = Math.max(0, this.p2SlotBounce[i] - dt);
+        const b = this.p2SlotBounce[i] / 0.36;
+        const m2 = this.p2ItemMeshes[i];
+        if (m2) {
+          const bounceY = Math.abs(Math.sin(b * Math.PI * 2.5)) * b * 0.14;
+          m2.position.y = this.p2SlotPositions[i].y + bounceY;
+        }
+      }
+    }
+
+    for (let i = this.dustRings.length - 1; i >= 0; i--) {
+      const dr = this.dustRings[i];
+      dr.progress += dt * 2.8;
+      const p = Math.min(1, dr.progress);
+      dr.mesh.scale.setScalar(1 + p * 1.45);
+      (dr.mesh.material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - p);
+      if (dr.progress >= 1) {
+        this.scene.remove(dr.mesh);
+        dr.mesh.geometry.dispose();
+        (dr.mesh.material as THREE.Material).dispose();
+        this.dustRings.splice(i, 1);
+      }
+    }
+
     // 3. Namlu Alevi Sönümlenmesi
     if (this.muzzleFlashTimer > 0) {
       this.muzzleFlashTimer -= dt;
@@ -3526,8 +4130,22 @@ export class Buckshot3DEngine {
 
       const leftTarget = av.baseLeftHandPos.clone();
       const rightTarget = av.baseRightHandPos.clone();
+      const crateGrabWorld =
+        seat === 1 ? activeCrateGrabP1 : activeCrateGrabP2;
 
-      if (this.activeItemAnim && this.activeItemAnim.userSeat === seat) {
+      if (crateGrabWorld) {
+        const localGrab = av.root.worldToLocal(crateGrabWorld.clone());
+        localGrab.y += 0.14;
+        if (localGrab.x < 0) {
+          leftTarget.copy(localGrab);
+        } else {
+          rightTarget.copy(localGrab);
+        }
+      } else if (
+        this.activeItemAnim &&
+        this.activeItemAnim.userSeat === seat &&
+        this.activeItemAnim.progress < 1.55
+      ) {
         const itemWorld = this.activeItemAnim.mesh.position.clone();
         const localTarget = av.root.worldToLocal(itemWorld);
         if (localTarget.x < 0) {
@@ -3549,24 +4167,45 @@ export class Buckshot3DEngine {
       leftTarget.y += Math.sin(elapsed * 2.6 + phaseOff) * 0.035;
       rightTarget.y += Math.cos(elapsed * 2.6 + phaseOff) * 0.035;
 
-      av.leftHand.position.lerp(leftTarget, dt * 10);
-      av.rightHand.position.lerp(rightTarget, dt * 10);
+      av.leftHand.position.lerp(leftTarget, dt * 11);
+      av.rightHand.position.lerp(rightTarget, dt * 11);
     };
 
     updateAvatarBehavior(this.avatarP1, 1);
     updateAvatarBehavior(this.avatarP2, 2);
 
-    // 8. Aktif 3D Eşya Kullanım Animasyonu
+    // 8. Aktif 3D Eşya Kullanım Animasyonu (Masadan Al -> Aksiyonu Yap -> Karanlık Boşluğa Fırlat!)
     if (this.activeItemAnim) {
-      this.activeItemAnim.progress += dt * 1.85;
-      const p = Math.min(1, this.activeItemAnim.progress);
-      this.activeItemAnim.mesh.position.lerpVectors(
-        this.activeItemAnim.startPos,
-        this.activeItemAnim.targetPos,
-        p
-      );
-      this.activeItemAnim.mesh.rotation.y += dt * 5;
-      if (this.activeItemAnim.progress >= 1.15) {
+      this.activeItemAnim.progress += dt * 1.9;
+      const pr = this.activeItemAnim.progress;
+      if (pr <= 1.0) {
+        // Masadan alıp hedef noktaya kaldırma
+        const ease = 1 - Math.pow(1 - pr, 2.2);
+        this.activeItemAnim.mesh.position.lerpVectors(
+          this.activeItemAnim.startPos,
+          this.activeItemAnim.targetPos,
+          ease
+        );
+        this.activeItemAnim.mesh.position.y += Math.sin(pr * Math.PI) * 0.25;
+        this.activeItemAnim.mesh.rotation.y += dt * 4.5;
+      } else if (pr <= 1.35) {
+        // Hedef noktada aksiyon anı (içecek dikme, şırınga saplama vb.)
+        this.activeItemAnim.mesh.position.copy(this.activeItemAnim.targetPos);
+        this.activeItemAnim.mesh.rotation.x =
+          Math.sin(((pr - 1.0) / 0.35) * Math.PI) * 0.65;
+      } else if (pr <= 2.05) {
+        // Kullanılmış eşyayı masa kenarından karanlık boşluğa fırlatma
+        const tossP = (pr - 1.35) / 0.7;
+        this.activeItemAnim.mesh.position.lerpVectors(
+          this.activeItemAnim.targetPos,
+          this.activeItemAnim.tossPos,
+          tossP
+        );
+        this.activeItemAnim.mesh.position.y +=
+          Math.sin(tossP * Math.PI) * 0.35 - tossP * tossP * 0.6;
+        this.activeItemAnim.mesh.rotation.x += dt * 9;
+        this.activeItemAnim.mesh.rotation.z += dt * 11;
+      } else {
         this.scene.remove(this.activeItemAnim.mesh);
         this.activeItemAnim = null;
       }
