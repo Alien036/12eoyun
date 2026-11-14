@@ -190,8 +190,15 @@ export default function BuckshotMultiplayerView({
     const onResize = () => eng.resize();
     window.addEventListener("resize", onResize);
 
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => eng.resize());
+      observer.observe(container);
+    }
+
     return () => {
       window.removeEventListener("resize", onResize);
+      observer?.disconnect();
       eng.dispose();
       engineRef.current = null;
     };

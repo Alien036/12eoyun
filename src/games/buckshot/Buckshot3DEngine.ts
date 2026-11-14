@@ -57,7 +57,8 @@ interface DefibPaddlesRig {
 }
 
 // ============================================================================
-// RETRO CRUNCH + 4x4 ORDERED BAYER DITHERING POST-PROCESSING HATTI
+// 1080p NATIVE FULL HD + MSAA + 1px MİKRO-DITHER POST-PROCESSING HATTI
+// (Sıfır Piksel Küçültme / Sıfır Bulanıklaştırma — Jilet Keskinliğinde 1080p!)
 // ============================================================================
 export class RetroBayerPostProcessor {
   public renderTarget: THREE.WebGLRenderTarget;
@@ -66,14 +67,15 @@ export class RetroBayerPostProcessor {
   private quadMesh: THREE.Mesh;
   private shaderMat: THREE.ShaderMaterial;
 
-  constructor(width: number = 640, height: number = 360) {
+  constructor(width: number = 1920, height: number = 1080) {
     this.renderTarget = new THREE.WebGLRenderTarget(width, height, {
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
       format: THREE.RGBAFormat,
       generateMipmaps: false,
       depthBuffer: true,
       stencilBuffer: false,
+      samples: 4, // WebGL2 4x MSAA Jilet Keskinliğinde Kenarlar
     });
 
     this.postScene = new THREE.Scene();
@@ -98,7 +100,7 @@ export class RetroBayerPostProcessor {
         uniform float uFlash;
         varying vec2 vUv;
 
-        // Standart 4x4 Ordered Bayer Dithering Matrisi
+        // 1 Piksellik İnce Mikro-Dither Matrisi (Bulanıklaştırmaz, banding'i önler)
         float bayer4x4(vec2 pos) {
           int x = int(mod(pos.x, 4.0));
           int y = int(mod(pos.y, 4.0));
@@ -125,26 +127,24 @@ export class RetroBayerPostProcessor {
           vec4 texel = texture2D(tDiffuse, vUv);
           vec3 color = texel.rgb;
 
-          // Hafif kontrast artışı ve sıcak-kirli pas (gritty warm-rust) tonlaması
-          color = (color - 0.5) * 1.14 + 0.5;
-          color *= vec3(1.06, 0.99, 0.91);
+          // Keskin 1080p kontrast ve sıcak-endüstriyel (Gritty Industrial) renk tonlaması
+          color = (color - 0.5) * 1.12 + 0.5;
+          color *= vec3(1.04, 0.99, 0.93);
 
           // 2 karelik kör edici namlu/elektroşok beyaz-sarı flaşı
           if (uFlash > 0.0) {
-            color = mix(color, vec3(1.0, 0.96, 0.82), clamp(uFlash, 0.0, 1.0));
+            color = mix(color, vec3(1.0, 0.97, 0.86), clamp(uFlash, 0.0, 1.0));
           }
 
-          // Piksel koordinatında 4x4 Bayer Dithering + Color Quantization
-          vec2 pixCoord = floor(vUv * uResolution);
-          float bayerThreshold = bayer4x4(pixCoord) * 0.85;
-          color = clamp(color, 0.0, 1.0);
-          color = floor(color * 24.0 + bayerThreshold) / 24.0;
+          // Tam 1080p piksel koordinatında 1px mikro-dither / ince film greni (Çamurlaşma sıfır!)
+          float microDither = bayer4x4(gl_FragCoord.xy) * (1.0 / 92.0);
+          color = clamp(color + vec3(microDither), 0.0, 1.0);
 
-          // Derin kenar karartması (Vignette)
+          // Temiz sinematik kenar karartması (Vignette)
           vec2 centered = vUv - 0.5;
           float distSq = dot(centered, centered);
-          float vig = smoothstep(0.68, 0.14, distSq);
-          color *= mix(0.24, 1.0, vig);
+          float vig = smoothstep(0.74, 0.16, distSq);
+          color *= mix(0.28, 1.0, vig);
 
           gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
         }
@@ -161,8 +161,8 @@ export class RetroBayerPostProcessor {
   }
 
   public setSize(width: number, height: number): void {
-    const rtW = Math.max(320, Math.floor(width));
-    const rtH = Math.max(200, Math.floor(height));
+    const rtW = Math.max(1, Math.floor(width));
+    const rtH = Math.max(1, Math.floor(height));
     this.renderTarget.setSize(rtW, rtH);
     this.shaderMat.uniforms.uResolution.value.set(rtW, rtH);
   }
@@ -269,6 +269,18 @@ export const ITEM_3D_LABELS: Record<BuckshotItemKey, string> = {
 // PROSEDÜREL RENK (MAP), KABARTMA (BUMPMAP) VE PÜRÜZLÜLÜK (ROUGHNESSMAP) DOKULARI
 // ============================================================================
 
+export function configureSharpTexture(
+  tex: THREE.CanvasTexture,
+  maxAnisotropy: number = 16
+): THREE.CanvasTexture {
+  tex.anisotropy = maxAnisotropy;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 function createFeltTableTextures(): {
   map: THREE.CanvasTexture;
   bumpMap: THREE.CanvasTexture;
@@ -280,45 +292,45 @@ function createFeltTableTextures(): {
   const ctx = canvas.getContext("2d")!;
 
   const bumpCanvas = document.createElement("canvas");
-  bumpCanvas.width = 512;
-  bumpCanvas.height = 512;
+  bumpCanvas.width = 1024;
+  bumpCanvas.height = 1024;
   const bCtx = bumpCanvas.getContext("2d")!;
 
-  // 1. Eskitilmiş koyu yeşil yeraltı çuha zemini
-  ctx.fillStyle = "#102318";
+  // 1. Eskitilmiş zeytin-yeşili endüstriyel masa yüzeyi (1024x1024 1080p Keskin Doku)
+  ctx.fillStyle = "#122619";
   ctx.fillRect(0, 0, 1024, 1024);
 
   bCtx.fillStyle = "#808080";
-  bCtx.fillRect(0, 0, 512, 512);
+  bCtx.fillRect(0, 0, 1024, 1024);
 
-  // Radyal kirli chiaroscuro gölgeleme (kenarlar çok koyu)
+  // Radyal kirli chiaroscuro gölgeleme (kenarlar koyu)
   const grad = ctx.createRadialGradient(512, 512, 80, 512, 512, 660);
-  grad.addColorStop(0, "rgba(38, 86, 56, 0.55)");
-  grad.addColorStop(0.58, "rgba(14, 33, 22, 0.65)");
+  grad.addColorStop(0, "rgba(42, 92, 60, 0.56)");
+  grad.addColorStop(0.58, "rgba(16, 36, 24, 0.65)");
   grad.addColorStop(1, "rgba(3, 6, 4, 0.96)");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 1024, 1024);
 
-  // Çuha dokuma lifleri ve aşınma gürültüsü
-  for (let i = 0; i < 26000; i++) {
+  // İnce mikro-lif ve boya aşınma dokusu
+  for (let i = 0; i < 32000; i++) {
     const x = Math.random() * 1024;
     const y = Math.random() * 1024;
     const dark = Math.random() < 0.6;
     ctx.fillStyle = dark
-      ? `rgba(2, 6, 4, ${Math.random() * 0.34})`
-      : `rgba(64, 124, 82, ${Math.random() * 0.14})`;
-    ctx.fillRect(x, y, 2 + Math.random() * 3, 2 + Math.random() * 3);
+      ? `rgba(2, 6, 4, ${Math.random() * 0.32})`
+      : `rgba(68, 128, 86, ${Math.random() * 0.14})`;
+    ctx.fillRect(x, y, 1.5 + Math.random() * 2, 1.5 + Math.random() * 2);
 
-    if (i < 14000) {
-      const bx = Math.random() * 512;
-      const by = Math.random() * 512;
+    if (i < 16000) {
+      const bx = Math.random() * 1024;
+      const by = Math.random() * 1024;
       const bVal = 95 + Math.floor(Math.random() * 65);
       bCtx.fillStyle = `rgb(${bVal},${bVal},${bVal})`;
       bCtx.fillRect(bx, by, 2, 2);
     }
   }
 
-  // Yağ, kan/pas ve barut lekeleri
+  // Yağ, pas ve barut lekeleri
   for (let s = 0; s < 34; s++) {
     const sx = 100 + Math.random() * 824;
     const sy = 100 + Math.random() * 824;
@@ -331,20 +343,12 @@ function createFeltTableTextures(): {
     ctx.arc(sx, sy, r, 0, Math.PI * 2);
     ctx.fill();
 
-    // Yağ lekeleri daha pürüzsüz/parlak (roughnessMap'te daha koyu)
-    const bg = bCtx.createRadialGradient(
-      sx * 0.5,
-      sy * 0.5,
-      1,
-      sx * 0.5,
-      sy * 0.5,
-      r * 0.5
-    );
+    const bg = bCtx.createRadialGradient(sx, sy, 2, sx, sy, r);
     bg.addColorStop(0, "rgba(50, 50, 50, 0.65)");
     bg.addColorStop(1, "rgba(128, 128, 128, 0)");
     bCtx.fillStyle = bg;
     bCtx.beginPath();
-    bCtx.arc(sx * 0.5, sy * 0.5, r * 0.5, 0, Math.PI * 2);
+    bCtx.arc(sx, sy, r, 0, Math.PI * 2);
     bCtx.fill();
   }
 
@@ -362,21 +366,21 @@ function createFeltTableTextures(): {
     ctx.lineTo(x2, y2);
     ctx.stroke();
 
-    bCtx.lineWidth = 1.5;
+    bCtx.lineWidth = 2;
     bCtx.beginPath();
-    bCtx.moveTo(x1 * 0.5, y1 * 0.5);
-    bCtx.lineTo(x2 * 0.5, y2 * 0.5);
+    bCtx.moveTo(x1, y1);
+    bCtx.lineTo(x2, y2);
     bCtx.stroke();
   }
 
-  // Yer yer silinmiş tebeşir beyazı masa dış çerçevesi
-  ctx.strokeStyle = "rgba(222, 230, 218, 0.68)";
-  ctx.lineWidth = 4;
+  // Keskin beyaz masa dış çerçevesi
+  ctx.strokeStyle = "rgba(232, 238, 228, 0.78)";
+  ctx.lineWidth = 4.5;
   ctx.strokeRect(42, 42, 940, 940);
 
-  // Videodaki Birebir Masa Düzeni: Tam Ortada Büyük Beyaz Tebeşir Çemberi ve Yatay Beyaz Çizgi!
-  ctx.strokeStyle = "rgba(236, 242, 232, 0.84)";
-  ctx.lineWidth = 4.5;
+  // Videodaki Birebir Masa Düzeni: Tam Ortada Jilet Netliğinde Beyaz Çember ve Yatay Merkez Çizgisi!
+  ctx.strokeStyle = "rgba(244, 248, 240, 0.92)";
+  ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.moveTo(46, 512);
   ctx.lineTo(374, 512);
@@ -388,16 +392,16 @@ function createFeltTableTextures(): {
   ctx.arc(512, 512, 138, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Çember içinde hafif silik nişangah çentikleri
-  ctx.strokeStyle = "rgba(236, 242, 232, 0.42)";
+  // Çember içinde ince ikinci halka
+  ctx.strokeStyle = "rgba(244, 248, 240, 0.52)";
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.arc(512, 512, 122, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Yan Kenar: 8 Bölmeli Beyaz Mermi Dizilim Kutucukları (Videodaki gibi keskin beyaz bölmeler)
-  ctx.strokeStyle = "rgba(236, 242, 232, 0.82)";
-  ctx.lineWidth = 3.5;
+  // Yan Kenar: 8 Bölmeli Beyaz Mermi Dizilim Kutucukları (1080p keskin beyaz bölmeler)
+  ctx.strokeStyle = "rgba(244, 248, 240, 0.9)";
+  ctx.lineWidth = 4;
   ctx.strokeRect(64, 356, 148, 312);
   for (let m = 0; m < 8; m++) {
     const my = 368 + m * 36;
@@ -420,11 +424,10 @@ function createFeltTableTextures(): {
     const hatchH = 184;
     ctx.fillStyle = "#030404";
     ctx.fillRect(hatchX, hatchY, hatchW, hatchH);
-    ctx.strokeStyle = "rgba(232, 238, 226, 0.82)";
-    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = "rgba(240, 246, 236, 0.9)";
+    ctx.lineWidth = 4;
     ctx.strokeRect(hatchX - 4, hatchY - 4, hatchW + 8, hatchH + 8);
-    // Kapak iç birleşim çizgisi
-    ctx.strokeStyle = "rgba(75, 85, 99, 0.45)";
+    ctx.strokeStyle = "rgba(100, 116, 139, 0.55)";
     ctx.lineWidth = 2;
     ctx.strokeRect(hatchX + 8, hatchY + 8, hatchW - 16, hatchH - 16);
 
@@ -439,28 +442,20 @@ function createFeltTableTextures(): {
       { x: xColsRight[1], y: rowY2 },
     ];
 
-    ctx.strokeStyle = "rgba(236, 242, 232, 0.85)";
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(244, 248, 240, 0.92)";
+    ctx.lineWidth = 4.5;
     allCoords.forEach((pt) => {
       ctx.strokeRect(pt.x, pt.y, boxSize, boxSize);
-      // Tebeşir aşınma darbeleri
-      ctx.fillStyle = "rgba(16, 35, 24, 0.45)";
-      ctx.fillRect(pt.x + 28, pt.y - 2, 16, 5);
+      ctx.fillStyle = "rgba(16, 35, 24, 0.35)";
+      ctx.fillRect(pt.x + 28, pt.y - 2, 14, 5);
     });
   };
 
   drawPlayerStationGrid(false);
   drawPlayerStationGrid(true);
 
-  const map = new THREE.CanvasTexture(canvas);
-  map.magFilter = THREE.NearestFilter;
-  map.minFilter = THREE.NearestFilter;
-  map.needsUpdate = true;
-
-  const bumpMap = new THREE.CanvasTexture(bumpCanvas);
-  bumpMap.magFilter = THREE.LinearFilter;
-  bumpMap.minFilter = THREE.LinearFilter;
-  bumpMap.needsUpdate = true;
+  const map = configureSharpTexture(new THREE.CanvasTexture(canvas), 16);
+  const bumpMap = configureSharpTexture(new THREE.CanvasTexture(bumpCanvas), 16);
 
   return { map, bumpMap, roughnessMap: bumpMap };
 }
@@ -471,26 +466,26 @@ export function createGrungeBrickTextures(): {
   roughnessMap: THREE.CanvasTexture;
 } {
   const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
+  canvas.width = 1024;
+  canvas.height = 1024;
   const ctx = canvas.getContext("2d")!;
 
   const bumpCanvas = document.createElement("canvas");
-  bumpCanvas.width = 512;
-  bumpCanvas.height = 512;
+  bumpCanvas.width = 1024;
+  bumpCanvas.height = 1024;
   const bCtx = bumpCanvas.getContext("2d")!;
 
-  // Derz araları koyu ve içeri gömülü (bumpMap'te siyah)
+  // Derz araları koyu ve içeri gömülü (1024x1024 1080p keskin tuğla duvar)
   ctx.fillStyle = "#090505";
-  ctx.fillRect(0, 0, 512, 512);
+  ctx.fillRect(0, 0, 1024, 1024);
 
   bCtx.fillStyle = "#181818";
-  bCtx.fillRect(0, 0, 512, 512);
+  bCtx.fillRect(0, 0, 1024, 1024);
 
   const rows = 16;
   const cols = 8;
-  const brickH = 512 / rows;
-  const brickW = 512 / cols;
+  const brickH = 1024 / rows;
+  const brickW = 1024 / cols;
 
   for (let r = 0; r < rows; r++) {
     const offset = (r % 2) * (brickW / 2);
@@ -500,19 +495,19 @@ export function createGrungeBrickTextures(): {
       const shade = 18 + Math.floor(Math.random() * 20);
       const red = shade + 14 + Math.floor(Math.random() * 16);
       ctx.fillStyle = `rgb(${red}, ${shade}, ${shade - 3})`;
-      ctx.fillRect(x + 3, y + 3, brickW - 6, brickH - 6);
+      ctx.fillRect(x + 6, y + 6, brickW - 12, brickH - 12);
 
       const bHeight = 145 + Math.floor(Math.random() * 75);
       bCtx.fillStyle = `rgb(${bHeight}, ${bHeight}, ${bHeight})`;
-      bCtx.fillRect(x + 3, y + 3, brickW - 6, brickH - 6);
+      bCtx.fillRect(x + 6, y + 6, brickW - 12, brickH - 12);
     }
   }
 
   // Tavandan aşağı doğru süzülen rutubet ve is lekeleri
-  for (let s = 0; s < 24; s++) {
-    const sx = Math.random() * 512;
-    const sw = 12 + Math.random() * 28;
-    const sh = 140 + Math.random() * 340;
+  for (let s = 0; s < 28; s++) {
+    const sx = Math.random() * 1024;
+    const sw = 24 + Math.random() * 56;
+    const sh = 280 + Math.random() * 680;
     const streakGrad = ctx.createLinearGradient(sx, 0, sx, sh);
     streakGrad.addColorStop(0, "rgba(2, 2, 2, 0.78)");
     streakGrad.addColorStop(0.6, "rgba(8, 12, 9, 0.42)");
@@ -522,31 +517,29 @@ export function createGrungeBrickTextures(): {
   }
 
   // Tuğla pürüzleri
-  for (let i = 0; i < 8000; i++) {
-    const rx = Math.random() * 512;
-    const ry = Math.random() * 512;
+  for (let i = 0; i < 14000; i++) {
+    const rx = Math.random() * 1024;
+    const ry = Math.random() * 1024;
     ctx.fillStyle =
       Math.random() < 0.72 ? "rgba(0,0,0,0.38)" : "rgba(85,40,28,0.16)";
-    ctx.fillRect(rx, ry, 3, 3);
+    ctx.fillRect(rx, ry, 4, 4);
 
     const bv = Math.random() < 0.5 ? 60 : 210;
     bCtx.fillStyle = `rgba(${bv},${bv},${bv},0.28)`;
-    bCtx.fillRect(rx, ry, 3, 3);
+    bCtx.fillRect(rx, ry, 4, 4);
   }
 
   const map = new THREE.CanvasTexture(canvas);
   map.wrapS = THREE.RepeatWrapping;
   map.wrapT = THREE.RepeatWrapping;
   map.repeat.set(3, 2);
-  map.magFilter = THREE.NearestFilter;
-  map.minFilter = THREE.NearestFilter;
-  map.needsUpdate = true;
+  configureSharpTexture(map, 16);
 
   const bumpMap = new THREE.CanvasTexture(bumpCanvas);
   bumpMap.wrapS = THREE.RepeatWrapping;
   bumpMap.wrapT = THREE.RepeatWrapping;
   bumpMap.repeat.set(3, 2);
-  bumpMap.needsUpdate = true;
+  configureSharpTexture(bumpMap, 16);
 
   return { map, bumpMap, roughnessMap: bumpMap };
 }
@@ -589,14 +582,12 @@ export function createRustyMetalTextures(): {
   const map = new THREE.CanvasTexture(canvas);
   map.wrapS = THREE.RepeatWrapping;
   map.wrapT = THREE.RepeatWrapping;
-  map.magFilter = THREE.NearestFilter;
-  map.minFilter = THREE.NearestFilter;
-  map.needsUpdate = true;
+  configureSharpTexture(map, 16);
 
   const bumpMap = new THREE.CanvasTexture(bumpCanvas);
   bumpMap.wrapS = THREE.RepeatWrapping;
   bumpMap.wrapT = THREE.RepeatWrapping;
-  bumpMap.needsUpdate = true;
+  configureSharpTexture(bumpMap, 16);
 
   return { map, bumpMap };
 }
@@ -642,14 +633,12 @@ export function createWalnutWoodTextures(): {
   const map = new THREE.CanvasTexture(canvas);
   map.wrapS = THREE.RepeatWrapping;
   map.wrapT = THREE.RepeatWrapping;
-  map.magFilter = THREE.NearestFilter;
-  map.minFilter = THREE.NearestFilter;
-  map.needsUpdate = true;
+  configureSharpTexture(map, 16);
 
   const bumpMap = new THREE.CanvasTexture(bumpCanvas);
   bumpMap.wrapS = THREE.RepeatWrapping;
   bumpMap.wrapT = THREE.RepeatWrapping;
-  bumpMap.needsUpdate = true;
+  configureSharpTexture(bumpMap, 16);
 
   return { map, bumpMap };
 }
@@ -663,60 +652,57 @@ export function createBrushedSteelTexture(): THREE.CanvasTexture {
   ctx.fillStyle = "#222c38";
   ctx.fillRect(0, 0, 512, 512);
 
-  for (let i = 0; i < 5000; i++) {
+  for (let i = 0; i < 6500; i++) {
     const bright = Math.random() < 0.45;
     ctx.fillStyle = bright
-      ? `rgba(148, 163, 184, ${Math.random() * 0.18})`
+      ? `rgba(148, 163, 184, ${Math.random() * 0.2})`
       : `rgba(12, 18, 28, ${Math.random() * 0.32})`;
-    ctx.fillRect(Math.random() * 512, Math.random() * 512, 18, 1.2);
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, 22, 1.2);
   }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
+  return configureSharpTexture(tex, 16);
 }
 
 function createCrackedPorcelainTexture(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = 512;
+  canvas.height = 512;
   const ctx = canvas.getContext("2d")!;
 
   ctx.fillStyle = "#dfd9ce";
-  ctx.fillRect(0, 0, 256, 256);
+  ctx.fillRect(0, 0, 512, 512);
 
-  for (let i = 0; i < 3000; i++) {
+  for (let i = 0; i < 5000; i++) {
     ctx.fillStyle =
       Math.random() < 0.65
         ? `rgba(68, 60, 52, ${Math.random() * 0.14})`
         : `rgba(250, 246, 238, ${Math.random() * 0.2})`;
-    ctx.fillRect(Math.random() * 256, Math.random() * 256, 3, 3);
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, 4, 4);
   }
 
   ctx.strokeStyle = "#1c1917";
-  ctx.lineWidth = 2.2;
+  ctx.lineWidth = 4;
   const cracks = [
     [
-      [62, 18],
-      [78, 56],
-      [66, 98],
-      [92, 134],
-      [84, 178],
+      [124, 36],
+      [156, 112],
+      [132, 196],
+      [184, 268],
+      [168, 356],
     ],
     [
-      [188, 32],
-      [172, 74],
-      [195, 112],
-      [168, 162],
+      [376, 64],
+      [344, 148],
+      [390, 224],
+      [336, 324],
     ],
     [
-      [78, 56],
-      [112, 68],
-      [126, 92],
+      [156, 112],
+      [224, 136],
+      [252, 184],
     ],
   ];
   cracks.forEach((path) => {
@@ -728,46 +714,39 @@ function createCrackedPorcelainTexture(): THREE.CanvasTexture {
     ctx.stroke();
   });
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
+  return configureSharpTexture(new THREE.CanvasTexture(canvas), 16);
 }
 
 function createBandageTexture(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = 128;
-  canvas.height = 128;
+  canvas.width = 512;
+  canvas.height = 512;
   const ctx = canvas.getContext("2d")!;
 
   ctx.fillStyle = "#cbc3b4";
-  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillRect(0, 0, 512, 512);
 
   ctx.strokeStyle = "rgba(75, 65, 54, 0.45)";
-  ctx.lineWidth = 2;
-  for (let y = 0; y < 128; y += 14) {
+  ctx.lineWidth = 4;
+  for (let y = 0; y < 512; y += 36) {
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.lineTo(128, y + 6);
+    ctx.lineTo(512, y + 18);
     ctx.stroke();
   }
 
-  for (let i = 0; i < 600; i++) {
+  for (let i = 0; i < 1800; i++) {
     ctx.fillStyle =
       Math.random() < 0.25
         ? "rgba(120, 38, 28, 0.18)"
         : "rgba(58, 50, 42, 0.15)";
-    ctx.fillRect(Math.random() * 128, Math.random() * 128, 3, 2);
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, 5, 4);
   }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
+  return configureSharpTexture(tex, 16);
 }
 
 export function createChalkLabelTexture(
@@ -776,42 +755,38 @@ export function createChalkLabelTexture(
   stealMode: boolean
 ): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 64;
+  canvas.width = 512;
+  canvas.height = 128;
   const ctx = canvas.getContext("2d")!;
 
-  ctx.clearRect(0, 0, 256, 64);
+  ctx.clearRect(0, 0, 512, 128);
 
   ctx.fillStyle = stealMode
-    ? "rgba(68, 10, 24, 0.88)"
+    ? "rgba(68, 10, 24, 0.9)"
     : active
-    ? "rgba(28, 22, 12, 0.86)"
-    : "rgba(12, 16, 14, 0.72)";
-  ctx.fillRect(6, 8, 244, 48);
+    ? "rgba(28, 22, 12, 0.88)"
+    : "rgba(12, 16, 14, 0.78)";
+  ctx.fillRect(12, 16, 488, 96);
 
   ctx.strokeStyle = stealMode
-    ? "rgba(251, 113, 133, 0.95)"
+    ? "rgba(251, 113, 133, 0.96)"
     : active
-    ? "rgba(251, 191, 36, 0.92)"
-    : "rgba(148, 163, 184, 0.4)";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(6, 8, 244, 48);
+    ? "rgba(251, 191, 36, 0.95)"
+    : "rgba(148, 163, 184, 0.48)";
+  ctx.lineWidth = 5;
+  ctx.strokeRect(12, 16, 488, 96);
 
-  ctx.font = "900 24px monospace";
+  ctx.font = "900 46px monospace";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = stealMode
     ? "#fecdd3"
     : active
     ? "#fde68a"
-    : "rgba(203, 213, 225, 0.65)";
-  ctx.fillText(text, 128, 33);
+    : "rgba(226, 232, 240, 0.75)";
+  ctx.fillText(text, 256, 66);
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
+  return configureSharpTexture(new THREE.CanvasTexture(canvas), 16);
 }
 
 export function createTargetBadgeTexture(
@@ -820,73 +795,70 @@ export function createTargetBadgeTexture(
   isEnemy: boolean
 ): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = 384;
-  canvas.height = 96;
+  canvas.width = 512;
+  canvas.height = 128;
   const ctx = canvas.getContext("2d")!;
 
-  ctx.fillStyle = isEnemy ? "rgba(69, 10, 10, 0.9)" : "rgba(8, 47, 73, 0.9)";
-  ctx.fillRect(8, 8, 368, 80);
+  ctx.fillStyle = isEnemy ? "rgba(69, 10, 10, 0.92)" : "rgba(8, 47, 73, 0.92)";
+  ctx.fillRect(10, 10, 492, 108);
 
   ctx.strokeStyle = isEnemy ? "#ef4444" : "#38bdf8";
-  ctx.lineWidth = 4;
-  ctx.strokeRect(8, 8, 368, 80);
+  ctx.lineWidth = 5;
+  ctx.strokeRect(10, 10, 492, 108);
 
-  ctx.font = "900 26px monospace";
+  ctx.font = "900 34px monospace";
   ctx.textAlign = "center";
   ctx.fillStyle = isEnemy ? "#fecaca" : "#bae6fd";
-  ctx.fillText(title, 192, 42);
+  ctx.fillText(title, 256, 54);
 
-  ctx.font = "bold 18px monospace";
+  ctx.font = "bold 24px monospace";
   ctx.fillStyle = isEnemy ? "#fca5a5" : "#fde68a";
-  ctx.fillText(subtitle, 192, 70);
+  ctx.fillText(subtitle, 256, 92);
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
+  return configureSharpTexture(new THREE.CanvasTexture(canvas), 16);
 }
 
 // ============================================================================
-// VİDEODAKİ BİREBİR FİZİKSEL 3D EŞYA MODELLERİ (%28 BÜYÜTÜLMÜŞ)
+// VİDEODAKİ BİREBİR FİZİKSEL 3D EŞYA MODELLERİ (512x512 1080p KESKİN BASKILI)
 // ============================================================================
 
 let cachedDigitalCanTex: THREE.CanvasTexture | null = null;
 function getDigitalSodaCanTexture(): THREE.CanvasTexture {
   if (cachedDigitalCanTex) return cachedDigitalCanTex;
   const c = document.createElement("canvas");
-  c.width = 256;
-  c.height = 128;
+  c.width = 512;
+  c.height = 512;
   const ctx = c.getContext("2d")!;
 
-  // Kirli beyaz alüminyum gövde
-  ctx.fillStyle = "#e5e5e0";
-  ctx.fillRect(0, 0, 256, 128);
+  // Kirli beyaz/gümüş alüminyum gövde (512x512 1080p keskin baskı)
+  ctx.fillStyle = "#e7e5e0";
+  ctx.fillRect(0, 0, 512, 512);
 
-  // Siyah orta şerit ve üst/alt ince çizgiler
+  // Siyah orta şerit ve üst/alt keskin çizgiler
   ctx.fillStyle = "#111111";
-  ctx.fillRect(0, 34, 256, 56);
-  ctx.fillRect(0, 24, 256, 4);
-  ctx.fillRect(0, 96, 256, 4);
+  ctx.fillRect(0, 136, 512, 224);
+  ctx.fillRect(0, 96, 512, 16);
+  ctx.fillRect(0, 384, 512, 16);
 
-  // Yıldız ve "DIGITAL" baskısı
-  ctx.fillStyle = "#f5f5f4";
-  ctx.font = "900 26px monospace";
+  // Yıldız ve "★ DIGITAL ★" 1080p keskin baskısı
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "900 58px monospace";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("★ DIGITAL ★", 128, 63);
+  ctx.fillText("★ DIGITAL ★", 256, 228);
 
-  // Pas ve kir lekeleri
-  for (let i = 0; i < 450; i++) {
+  ctx.font = "700 24px monospace";
+  ctx.fillStyle = "#cbd5e1";
+  ctx.fillText("CARBONATED MALT • 330ML", 256, 298);
+
+  // Aşınma ve metal çizikleri
+  for (let i = 0; i < 900; i++) {
     ctx.fillStyle =
-      Math.random() < 0.5 ? "rgba(0,0,0,0.18)" : "rgba(120,80,40,0.14)";
-    ctx.fillRect(Math.random() * 256, Math.random() * 128, 3, 3);
+      Math.random() < 0.5 ? "rgba(0,0,0,0.16)" : "rgba(120,80,40,0.12)";
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, 4, 3);
   }
 
-  const tex = new THREE.CanvasTexture(c);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
+  const tex = configureSharpTexture(new THREE.CanvasTexture(c), 16);
   cachedDigitalCanTex = tex;
   return tex;
 }
@@ -895,21 +867,212 @@ let cachedPhoneStaticTex: THREE.CanvasTexture | null = null;
 function getFlipPhoneStaticTexture(): THREE.CanvasTexture {
   if (cachedPhoneStaticTex) return cachedPhoneStaticTex;
   const c = document.createElement("canvas");
-  c.width = 64;
-  c.height = 64;
+  c.width = 512;
+  c.height = 512;
   const ctx = c.getContext("2d")!;
-  for (let y = 0; y < 64; y += 2) {
-    for (let x = 0; x < 64; x += 2) {
-      const v = Math.random() > 0.48 ? 235 : 18;
+  ctx.fillStyle = "#090d0b";
+  ctx.fillRect(0, 0, 512, 512);
+
+  for (let y = 0; y < 512; y += 8) {
+    for (let x = 0; x < 512; x += 8) {
+      const v = Math.random() > 0.48 ? 235 : 22;
       ctx.fillStyle = `rgb(${v},${v},${v})`;
-      ctx.fillRect(x, y, 2, 2);
+      ctx.fillRect(x, y, 8, 6);
     }
   }
-  const tex = new THREE.CanvasTexture(c);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
+
+  // Ekran üst/alt çerçeve ve sinyal çubukları
+  ctx.fillStyle = "rgba(0,0,0,0.82)";
+  ctx.fillRect(0, 0, 512, 86);
+  ctx.fillRect(0, 426, 512, 86);
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "900 36px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("▂▄▆█ ENCRYPTED", 256, 54);
+  ctx.fillText("VOICE CHANNEL", 256, 476);
+
+  const tex = configureSharpTexture(new THREE.CanvasTexture(c), 16);
   cachedPhoneStaticTex = tex;
+  return tex;
+}
+
+let cachedPhoneKeypadTex: THREE.CanvasTexture | null = null;
+function getFlipPhoneKeypadTexture(): THREE.CanvasTexture {
+  if (cachedPhoneKeypadTex) return cachedPhoneKeypadTex;
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 512;
+  const ctx = c.getContext("2d")!;
+
+  ctx.fillStyle = "#18181b";
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Üst D-Pad yön tuşu halkası
+  ctx.strokeStyle = "#a1a1aa";
+  ctx.lineWidth = 8;
+  ctx.strokeRect(176, 28, 160, 96);
+  ctx.fillStyle = "#27272a";
+  ctx.fillRect(216, 48, 80, 56);
+
+  // Sol/Sağ yeşil/kırmızı arama tuşları
+  ctx.fillStyle = "#166534";
+  ctx.fillRect(42, 42, 108, 68);
+  ctx.fillStyle = "#991b1b";
+  ctx.fillRect(362, 42, 108, 68);
+
+  // 1-9, *, 0, # Tuş Takımı (512x512 1080p Jilet Netliğinde)
+  const keys = [
+    ["1", "2", "3"],
+    ["4", "5", "6"],
+    ["7", "8", "9"],
+    ["*", "0", "#"],
+  ];
+  const sub = [
+    ["OO", "ABC", "DEF"],
+    ["GHI", "JKL", "MNO"],
+    ["PQRS", "TUV", "WXYZ"],
+    ["+", "OPER", "⇧"],
+  ];
+
+  for (let r = 0; r < 4; r++) {
+    for (let col = 0; col < 3; col++) {
+      const kx = 42 + col * 148;
+      const ky = 148 + r * 86;
+      ctx.fillStyle = "#27272a";
+      ctx.fillRect(kx, ky, 132, 72);
+      ctx.strokeStyle = "#71717a";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(kx, ky, 132, 72);
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "900 38px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(keys[r][col], kx + 46, ky + 48);
+
+      ctx.fillStyle = "#a1a1aa";
+      ctx.font = "700 18px monospace";
+      ctx.fillText(sub[r][col], kx + 96, ky + 46);
+    }
+  }
+
+  const tex = configureSharpTexture(new THREE.CanvasTexture(c), 16);
+  cachedPhoneKeypadTex = tex;
+  return tex;
+}
+
+let cachedPrescriptionMedTex: THREE.CanvasTexture | null = null;
+function getPrescriptionMedLabelTexture(): THREE.CanvasTexture {
+  if (cachedPrescriptionMedTex) return cachedPrescriptionMedTex;
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 512;
+  const ctx = c.getContext("2d")!;
+
+  // Kehribar şişe gövdesi + ortada siyah-beyaz ilaç etiketi ("PRESCRIPTION MEDICINE")
+  ctx.fillStyle = "#b45309";
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Kirli beyaz ilaç etiketi
+  ctx.fillStyle = "#f5f5f0";
+  ctx.fillRect(0, 96, 512, 320);
+
+  ctx.fillStyle = "#09090b";
+  ctx.fillRect(0, 96, 512, 56);
+  ctx.fillRect(0, 368, 512, 48);
+
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "900 30px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("PRESCRIPTION MEDICINE", 256, 134);
+
+  ctx.fillStyle = "#09090b";
+  ctx.font = "900 36px monospace";
+  ctx.fillText("RX #409-B • 50MG", 256, 206);
+  ctx.font = "700 24px monospace";
+  ctx.fillText("TAKE 1 TABLET BY MOUTH", 256, 256);
+
+  ctx.fillStyle = "#dc2626";
+  ctx.font = "900 28px monospace";
+  ctx.fillText("⚠ EXPIRED / UNSTABLE ⚠", 256, 316);
+
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "700 22px monospace";
+  ctx.fillText("DO NOT EXCEED DOSAGE", 256, 398);
+
+  const tex = configureSharpTexture(new THREE.CanvasTexture(c), 16);
+  cachedPrescriptionMedTex = tex;
+  return tex;
+}
+
+let cachedPcbTex: THREE.CanvasTexture | null = null;
+function getPcbCircuitTexture(): THREE.CanvasTexture {
+  if (cachedPcbTex) return cachedPcbTex;
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 512;
+  const ctx = c.getContext("2d")!;
+
+  ctx.fillStyle = "#0f291e";
+  ctx.fillRect(0, 0, 512, 512);
+
+  // 1080p keskin bakır devre yolları ve lehim adacıkları
+  ctx.strokeStyle = "#d97706";
+  ctx.lineWidth = 6;
+  for (let i = 32; i < 480; i += 36) {
+    ctx.beginPath();
+    ctx.moveTo(24, i);
+    ctx.lineTo(180 + (i % 90), i);
+    ctx.lineTo(240 + (i % 90), i + 24);
+    ctx.lineTo(488, i + 24);
+    ctx.stroke();
+
+    ctx.fillStyle = "#fbbf24";
+    ctx.beginPath();
+    ctx.arc(24, i, 8, 0, Math.PI * 2);
+    ctx.arc(488, i + 24, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "900 24px monospace";
+  ctx.fillText("REV-4.2 POLARITY INV", 120, 488);
+
+  const tex = configureSharpTexture(new THREE.CanvasTexture(c), 16);
+  cachedPcbTex = tex;
+  return tex;
+}
+
+let cachedChargePackTex: THREE.CanvasTexture | null = null;
+function getChargePackTexture(): THREE.CanvasTexture {
+  if (cachedChargePackTex) return cachedChargePackTex;
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 512;
+  const ctx = c.getContext("2d")!;
+
+  ctx.fillStyle = "#1c1917";
+  ctx.fillRect(0, 0, 512, 512);
+
+  ctx.fillStyle = "#d97706";
+  ctx.fillRect(0, 120, 512, 92);
+
+  ctx.strokeStyle = "#e7e5e4";
+  ctx.lineWidth = 8;
+  ctx.strokeRect(24, 24, 464, 464);
+
+  ctx.fillStyle = "#09090b";
+  ctx.font = "900 44px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("★ TAR & NICOTINE ★", 256, 180);
+
+  ctx.fillStyle = "#f5f5f4";
+  ctx.font = "900 36px monospace";
+  ctx.fillText("FILTERED PACK", 256, 300);
+  ctx.font = "700 26px monospace";
+  ctx.fillText("CLASS A • 20 RODS", 256, 360);
+
+  const tex = configureSharpTexture(new THREE.CanvasTexture(c), 16);
+  cachedChargePackTex = tex;
   return tex;
 }
 
@@ -1075,24 +1238,28 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
     }
 
     case "sedative": {
-      // 5. Koyu Kutu Şarj / Sigara Paketi (Koyu Gövde + Açık Üst Folyo + İçinden Çıkan Şarj Çubukları)
+      // 5. Koyu Kutu Şarj / Sigara Paketi (512x512 HD Etiketli Koyu Gövde + Açık Üst Folyo + İçinden Çıkan Şarj Çubukları)
       const pack = new THREE.Mesh(
         new THREE.BoxGeometry(0.24, 0.32, 0.14),
-        new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.52 })
+        new THREE.MeshStandardMaterial({
+          map: getChargePackTexture(),
+          roughness: 0.48,
+          metalness: 0.25,
+        })
       );
       pack.position.y = 0.16;
       pack.castShadow = true;
       group.add(pack);
 
       const band = new THREE.Mesh(
-        new THREE.BoxGeometry(0.246, 0.07, 0.146),
+        new THREE.BoxGeometry(0.246, 0.055, 0.146),
         new THREE.MeshStandardMaterial({
           color: 0xd97706,
-          metalness: 0.5,
-          roughness: 0.35,
+          metalness: 0.55,
+          roughness: 0.32,
         })
       );
-      band.position.y = 0.22;
+      band.position.y = 0.23;
       group.add(band);
 
       const stickMat = new THREE.MeshStandardMaterial({
@@ -1106,14 +1273,14 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       });
       [-0.055, 0, 0.055].forEach((sx, idx) => {
         const cyl = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.022, 0.022, 0.12, 8),
+          new THREE.CylinderGeometry(0.022, 0.022, 0.12, 12),
           stickMat
         );
         cyl.position.set(sx, 0.34 + (idx === 1 ? 0.03 : 0), 0);
         group.add(cyl);
 
         const tip = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.023, 0.023, 0.025, 8),
+          new THREE.CylinderGeometry(0.023, 0.023, 0.025, 12),
           tipMat
         );
         tip.position.set(sx, 0.405 + (idx === 1 ? 0.03 : 0), 0);
@@ -1123,13 +1290,13 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
     }
 
     case "inverter": {
-      // 6. Açık Devre Kartlı Dönüştürücü (Inverter — Metalik Açık PCB Plakası + Yuvarlak Bakır Bobin + Elektronik Çipler)
+      // 6. Açık Devre Kartlı Dönüştürücü (Inverter — 512x512 Bakır İzli PCB Plakası + Yuvarlak Bakır Bobin + Elektronik Çipler)
       const pcbPlate = new THREE.Mesh(
         new THREE.BoxGeometry(0.32, 0.045, 0.28),
         new THREE.MeshStandardMaterial({
-          color: 0x1e293b,
-          metalness: 0.75,
-          roughness: 0.32,
+          map: getPcbCircuitTexture(),
+          metalness: 0.58,
+          roughness: 0.36,
         })
       );
       pcbPlate.position.y = 0.03;
@@ -1138,7 +1305,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
 
       // Üstündeki Yuvarlak Bakır/Ferrit Toroid Bobin
       const toroidCoil = new THREE.Mesh(
-        new THREE.TorusGeometry(0.075, 0.028, 10, 18),
+        new THREE.TorusGeometry(0.075, 0.028, 12, 24),
         new THREE.MeshStandardMaterial({
           color: 0xd97706,
           emissive: 0x92400e,
@@ -1166,7 +1333,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       });
 
       const statusLed = new THREE.Mesh(
-        new THREE.SphereGeometry(0.024, 8, 8),
+        new THREE.SphereGeometry(0.024, 12, 12),
         new THREE.MeshStandardMaterial({
           color: 0xc084fc,
           emissive: 0x9333ea,
@@ -1179,11 +1346,11 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
     }
 
     case "burnerPhone": {
-      // 7. Kapaklı Tuşlu Telefon (Flip Phone — Alt Tuş Takımı Gövdesi + Menteşeli Açılır Üst Ekran Kapağı!)
+      // 7. Kapaklı Tuşlu Telefon (Flip Phone — 512x512 Okunaklı 1-9, *, 0, # Tuş Takımı + Menteşeli Açılır Üst Ekran Kapağı!)
       const bodyMat = new THREE.MeshStandardMaterial({
         color: 0x18181b,
-        roughness: 0.48,
-        metalness: 0.35,
+        roughness: 0.44,
+        metalness: 0.42,
       });
       const bottomBase = new THREE.Mesh(
         new THREE.BoxGeometry(0.21, 0.042, 0.26),
@@ -1193,22 +1360,18 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       bottomBase.castShadow = true;
       group.add(bottomBase);
 
-      // 3x4 Gümüş Tuş Takımı Matrisi
-      const keyMat = new THREE.MeshStandardMaterial({
-        color: 0x71717a,
-        metalness: 0.7,
-        roughness: 0.3,
-      });
-      for (let r = 0; r < 4; r++) {
-        for (let c = -1; c <= 1; c++) {
-          const btn = new THREE.Mesh(
-            new THREE.BoxGeometry(0.042, 0.012, 0.032),
-            keyMat
-          );
-          btn.position.set(c * 0.052, 0.048, -0.02 + r * 0.046);
-          group.add(btn);
-        }
-      }
+      // 512x512 HD Okunaklı 1-9, *, 0, # Tuş Takımı ve Yön Tuşları Plakası
+      const keypadFace = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.194, 0.242),
+        new THREE.MeshStandardMaterial({
+          map: getFlipPhoneKeypadTexture(),
+          roughness: 0.34,
+          metalness: 0.48,
+        })
+      );
+      keypadFace.rotation.x = -Math.PI / 2;
+      keypadFace.position.set(0, 0.047, 0.05);
+      group.add(keypadFace);
 
       // Menteşeli Üst Kapak (flipLid — Masada hafif aralık, FPS kullanımda tam açılır!)
       const flipLid = new THREE.Group();
@@ -1224,9 +1387,9 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       lidShell.castShadow = true;
       flipLid.add(lidShell);
 
-      // İç Küçük Ekran: Siyah-Beyaz Piksel Parazit Deseni
+      // İç Küçük Ekran: 512x512 HD Siyah-Beyaz Piksel Parazit & Sinyal Deseni
       const innerScreen = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.15, 0.16),
+        new THREE.PlaneGeometry(0.168, 0.185),
         new THREE.MeshBasicMaterial({
           map: getFlipPhoneStaticTexture(),
           side: THREE.DoubleSide,
@@ -1237,7 +1400,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       flipLid.add(innerScreen);
 
       const ant = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.012, 0.014, 0.18, 8),
+        new THREE.CylinderGeometry(0.012, 0.014, 0.18, 10),
         bodyMat
       );
       ant.position.set(0.08, 0.06, -0.06);
@@ -1259,7 +1422,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       });
 
       const autoBody = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.068, 0.074, 0.36, 12),
+        new THREE.CylinderGeometry(0.068, 0.074, 0.36, 16),
         rustyBodyMat
       );
       autoBody.rotation.z = Math.PI / 2;
@@ -1281,7 +1444,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
 
       [-0.12, 0.12].forEach((rx) => {
         const collarRing = new THREE.Mesh(
-          new THREE.TorusGeometry(0.072, 0.012, 6, 12),
+          new THREE.TorusGeometry(0.072, 0.012, 8, 16),
           darkSteelMat
         );
         collarRing.rotation.y = Math.PI / 2;
@@ -1292,7 +1455,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       // Üst Uçtan Çıkan 3 Adet Dikenli İnce Metal İğne/Tel
       [-0.025, 0, 0.025].forEach((nz, idx) => {
         const wireNeedle = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.004, 0.009, 0.22, 6),
+          new THREE.CylinderGeometry(0.004, 0.009, 0.22, 8),
           darkSteelMat
         );
         wireNeedle.rotation.z = Math.PI / 2 + (idx - 1) * 0.08;
@@ -1302,7 +1465,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
 
       // Arka darbe pistonu
       const rearCap = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.055, 0.055, 0.08, 10),
+        new THREE.CylinderGeometry(0.055, 0.055, 0.08, 12),
         darkSteelMat
       );
       rearCap.rotation.z = Math.PI / 2;
@@ -1312,23 +1475,23 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
     }
 
     case "expiredMed": {
-      // 9. Bozuk İlaç Kutusu (Kehribar Hap Şişesi + Beyaz Kapak)
+      // 9. Bozuk İlaç Kutusu (512x512 HD "PRESCRIPTION MEDICINE" Etiketli İlaç Şişesi + Yivli Beyaz Kapak)
       const bot = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.14, 0.14, 0.31, 14),
+        new THREE.CylinderGeometry(0.14, 0.14, 0.31, 24),
         new THREE.MeshStandardMaterial({
-          color: 0xf59e0b,
-          emissive: 0xb45309,
-          emissiveIntensity: 0.28,
+          map: getPrescriptionMedLabelTexture(),
           roughness: 0.28,
+          metalness: 0.15,
         })
       );
+      bot.rotation.y = -Math.PI / 2; // Etiketin ön yüzü kameraya dönük
       bot.position.y = 0.155;
       bot.castShadow = true;
       group.add(bot);
 
       const cap = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.15, 0.15, 0.075, 14),
-        new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35 })
+        new THREE.CylinderGeometry(0.15, 0.15, 0.075, 24),
+        new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.32 })
       );
       cap.position.y = 0.33;
       group.add(cap);
@@ -1336,11 +1499,11 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
     }
 
     case "jammer": {
-      // 10. Sinyal Kesici (Jammer — Açık Yeşil PCB Devre Kartı + Bakır Bobin + Kapasitörler + Kırmızı LED + Çift Anten)
+      // 10. Sinyal Kesici (Jammer — 512x512 Bakır İzli PCB Devre Kartı + Bakır Bobin + Kapasitörler + Kırmızı LED + Çift Anten)
       const pcbMat = new THREE.MeshStandardMaterial({
-        color: 0x064e3b,
-        roughness: 0.42,
-        metalness: 0.35,
+        map: getPcbCircuitTexture(),
+        roughness: 0.38,
+        metalness: 0.45,
       });
       const pcbBoard = new THREE.Mesh(
         new THREE.BoxGeometry(0.34, 0.045, 0.28),
@@ -1357,7 +1520,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
         roughness: 0.22,
       });
       const coil = new THREE.Mesh(
-        new THREE.TorusGeometry(0.065, 0.024, 8, 16),
+        new THREE.TorusGeometry(0.065, 0.024, 12, 20),
         copperMat
       );
       coil.rotation.x = Math.PI / 2;
@@ -1372,7 +1535,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       });
       [0.05, 0.12].forEach((cx, idx) => {
         const cCyl = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.028, 0.028, 0.11, 10),
+          new THREE.CylinderGeometry(0.028, 0.028, 0.11, 12),
           capMat
         );
         cCyl.position.set(cx, 0.11, -0.04 + idx * 0.07);
@@ -1381,7 +1544,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
 
       // Parlayan Kırmızı Sinyal Kesici LED
       const redLed = new THREE.Mesh(
-        new THREE.SphereGeometry(0.032, 8, 8),
+        new THREE.SphereGeometry(0.032, 12, 12),
         new THREE.MeshStandardMaterial({
           color: 0xef4444,
           emissive: 0xdc2626,
@@ -1399,7 +1562,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       });
       [-0.11, 0.11].forEach((ax) => {
         const ant = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.01, 0.014, 0.28, 8),
+          new THREE.CylinderGeometry(0.01, 0.014, 0.28, 10),
           antMat
         );
         ant.position.set(ax, 0.18, -0.11);
@@ -1410,7 +1573,7 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
     }
 
     case "remote": {
-      // 11. Uzaktan Kumanda (Remote — Açık Devre Kartlı Endüstriyel Kumanda + Büyük Turuncu Yön Tuşu + Kehribar LED)
+      // 11. Uzaktan Kumanda (Remote — 512x512 Açık Devre Kartlı Endüstriyel Kumanda + Büyük Turuncu Yön Tuşu + Kehribar LED)
       const baseMat = new THREE.MeshStandardMaterial({
         color: 0x1c1917,
         roughness: 0.48,
@@ -1424,17 +1587,21 @@ export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       chassis.castShadow = true;
       group.add(chassis);
 
-      // Üst açık yeşil PCB şeridi
+      // Üst 512x512 bakır izli PCB şeridi
       const pcbStrip = new THREE.Mesh(
         new THREE.BoxGeometry(0.19, 0.02, 0.3),
-        new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.4 })
+        new THREE.MeshStandardMaterial({
+          map: getPcbCircuitTexture(),
+          roughness: 0.36,
+          metalness: 0.42,
+        })
       );
       pcbStrip.position.y = 0.085;
       group.add(pcbStrip);
 
       // Büyük Parlak Kehribar/Turuncu Yön Değiştirme Butonu (↻ ⇄ ↺)
       const mainBtn = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.062, 0.068, 0.055, 14),
+        new THREE.CylinderGeometry(0.062, 0.068, 0.055, 16),
         new THREE.MeshStandardMaterial({
           color: 0xf59e0b,
           emissive: 0xd97706,
@@ -2329,11 +2496,12 @@ export class Buckshot3DEngine {
   private lastItemsHashP2: string = "";
   private lastRevealHash: string = "";
   private lastTurnAndStealHash: string = "";
+  private cssWidth: number = 1280;
+  private cssHeight: number = 720;
 
   constructor(container: HTMLElement) {
     this.canvas = document.createElement("canvas");
     this.canvas.className = "w-full h-full block";
-    this.canvas.style.imageRendering = "pixelated";
     container.appendChild(this.canvas);
 
     this.clock = new THREE.Clock();
@@ -2394,12 +2562,12 @@ export class Buckshot3DEngine {
     this.scene.add(this.defibP1.root);
     this.scene.add(this.defibP2.root);
 
-    this.postProcessor = new RetroBayerPostProcessor(640, 360);
+    this.postProcessor = new RetroBayerPostProcessor(1920, 1080);
 
-    // Güvenli WebGL Başlatma + PCFSoftShadowMap + ACESFilmicToneMapping
+    // Güvenli WebGL Başlatma + 1080p Keskin Kenarlar (MSAA) + PCFSoftShadowMap + ACESFilmicToneMapping
     try {
-      const gl = (this.canvas.getContext("webgl2", { antialias: false }) ||
-        this.canvas.getContext("webgl", { antialias: false })) as
+      const gl = (this.canvas.getContext("webgl2", { antialias: true }) ||
+        this.canvas.getContext("webgl", { antialias: true })) as
         | WebGLRenderingContext
         | WebGL2RenderingContext
         | null;
@@ -2410,18 +2578,40 @@ export class Buckshot3DEngine {
         );
       }
 
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       this.renderer = new THREE.WebGLRenderer({
         canvas: this.canvas,
         context: gl as WebGLRenderingContext,
-        antialias: false,
+        antialias: true,
         powerPreference: "default",
       });
-      this.renderer.setPixelRatio(1);
+      this.renderer.setPixelRatio(dpr);
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      this.renderer.toneMappingExposure = 0.92;
+      this.renderer.toneMappingExposure = 0.94;
       this.renderer.setClearColor(0x000000, 1);
+
+      // Tüm sahne kaplamalarında maksimum Anisotropic Filtering (Eğik kamera açılarında jilet keskinliği)
+      const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
+      this.scene.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.material) return;
+        const mats = Array.isArray(mesh.material)
+          ? mesh.material
+          : [mesh.material];
+        mats.forEach((m) => {
+          const std = m as THREE.MeshStandardMaterial;
+          if (std.map) {
+            std.map.anisotropy = maxAniso;
+            std.map.needsUpdate = true;
+          }
+          if (std.bumpMap) {
+            std.bumpMap.anisotropy = maxAniso;
+            std.bumpMap.needsUpdate = true;
+          }
+        });
+      });
     } catch (err) {
       this.initError =
         err instanceof Error
@@ -3258,13 +3448,12 @@ export class Buckshot3DEngine {
       monGroup.add(switchLever);
     });
 
-    // Dinamik CRT Ekran CanvasTexture (Beyaz çizgilerle bölünmüş siyah ekran, ⚡ ikonları, I II III raunt ve O O O halkaları)
+    // Dinamik 1024x768 HD CRT Ekran CanvasTexture (Beyaz çizgilerle bölünmüş siyah ekran, ⚡ ikonları, I II III raunt ve O O O halkaları)
     this.crtScreenCanvas = document.createElement("canvas");
-    this.crtScreenCanvas.width = 512;
-    this.crtScreenCanvas.height = 384;
+    this.crtScreenCanvas.width = 1024;
+    this.crtScreenCanvas.height = 768;
     this.crtScreenTex = new THREE.CanvasTexture(this.crtScreenCanvas);
-    this.crtScreenTex.minFilter = THREE.NearestFilter;
-    this.crtScreenTex.magFilter = THREE.NearestFilter;
+    configureSharpTexture(this.crtScreenTex, 16);
 
     const screenMat = new THREE.MeshBasicMaterial({
       map: this.crtScreenTex,
@@ -3321,7 +3510,7 @@ export class Buckshot3DEngine {
     const st = this.currentState;
     const p1Name = (st.p1Name || "OYUNCU 1").toUpperCase().slice(0, 12);
     const p2Name = (
-      st.p2Name || (st.mode === "duel" ? "OYUNCU 2" : "KRUPİYE")
+      st.p2Name || (st.mode === "duel" ? "OYUNCU 2" : "DEALER")
     )
       .toUpperCase()
       .slice(0, 12);
@@ -3335,18 +3524,21 @@ export class Buckshot3DEngine {
     const ctx = this.crtScreenCanvas.getContext("2d");
     if (!ctx) return;
 
-    // Siyah CRT zemin
-    ctx.fillStyle = "#040605";
+    ctx.save();
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
+
+    // Simsiyah 1080p CRT zemin
+    ctx.fillStyle = "#020303";
     ctx.fillRect(0, 0, 512, 384);
 
-    // Hafif yatay tarama çizgileri (scanlines)
-    ctx.fillStyle = "rgba(255,255,255,0.035)";
-    for (let y = 0; y < 384; y += 4) {
+    // İnce keskin tarama çizgileri (scanlines)
+    ctx.fillStyle = "rgba(255,255,255,0.04)";
+    for (let y = 0; y < 384; y += 3) {
       ctx.fillRect(0, y, 512, 1);
     }
 
     // Dış beyaz çerçeve ve bölme çizgileri (Orijinal v1.2 CRT düzeni)
-    ctx.strokeStyle = st.wiresCutSuddenDeath ? "#ef4444" : "#e2e8f0";
+    ctx.strokeStyle = st.wiresCutSuddenDeath ? "#ef4444" : "#f8fafc";
     ctx.lineWidth = 4;
     ctx.strokeRect(10, 10, 492, 364);
 
@@ -3362,39 +3554,39 @@ export class Buckshot3DEngine {
     numerals.forEach((rom, idx) => {
       const rx = 148 + idx * 108;
       const isCurrentOrPast = idx + 1 <= round;
-      ctx.fillStyle = isCurrentOrPast ? "#f8fafc" : "#334155";
+      ctx.fillStyle = isCurrentOrPast ? "#ffffff" : "#334155";
       ctx.fillText(rom, rx, 50);
 
       // Altındaki beyaz halka (O O O)
       ctx.beginPath();
       ctx.arc(rx, 80, 11, 0, Math.PI * 2);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = isCurrentOrPast ? "#f8fafc" : "#334155";
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = isCurrentOrPast ? "#ffffff" : "#334155";
       ctx.stroke();
       if (idx + 1 < round) {
-        ctx.fillStyle = "#f8fafc";
+        ctx.fillStyle = "#ffffff";
         ctx.fill();
       } else if (idx + 1 === round) {
         ctx.fillStyle = "#22c55e";
         ctx.beginPath();
-        ctx.arc(rx, 80, 5, 0, Math.PI * 2);
+        ctx.arc(rx, 80, 5.5, 0, Math.PI * 2);
         ctx.fill();
       }
     });
 
     if (winnerText) {
-      ctx.fillStyle = "#f8fafc";
+      ctx.fillStyle = "#ffffff";
       ctx.font = "900 34px monospace";
       ctx.fillText(winnerText.toUpperCase(), 256, 235);
       ctx.font = "700 20px monospace";
       ctx.fillStyle = "#22c55e";
       ctx.fillText("RAUNT TAMAMLANDI", 256, 285);
     } else {
-      // Orta dikey bölme çizgisi (Sol: P2 / Krupiye, Sağ: P1)
+      // Orta dikey bölme çizgisi (Sol: DEALER / P2, Sağ: OYUNCU / P1)
       ctx.beginPath();
       ctx.moveTo(256, 108);
       ctx.lineTo(256, 374);
-      ctx.strokeStyle = st.wiresCutSuddenDeath ? "#ef4444" : "#e2e8f0";
+      ctx.strokeStyle = st.wiresCutSuddenDeath ? "#ef4444" : "#f8fafc";
       ctx.lineWidth = 4;
       ctx.stroke();
 
@@ -3404,7 +3596,7 @@ export class Buckshot3DEngine {
       ctx.lineTo(502, 168);
       ctx.stroke();
 
-      ctx.fillStyle = "#f8fafc";
+      ctx.fillStyle = "#ffffff";
       ctx.font = "900 24px monospace";
       ctx.fillText(p2Name, 133, 147);
       ctx.fillText(p1Name, 379, 147);
@@ -3424,7 +3616,7 @@ export class Buckshot3DEngine {
           ctx.fillStyle = active
             ? st.wiresCutSuddenDeath
               ? "#ef4444"
-              : "#f8fafc"
+              : "#ffffff"
             : "#1e293b";
           ctx.fillText("⚡", bx, 285);
         }
@@ -3434,6 +3626,7 @@ export class Buckshot3DEngine {
       drawBolts(379, st.p1Hp, st.maxHp);
     }
 
+    ctx.restore();
     this.crtScreenTex.needsUpdate = true;
   }
 
@@ -4825,12 +5018,15 @@ export class Buckshot3DEngine {
     const h = parent ? parent.clientHeight : window.innerHeight;
     if (w <= 0 || h <= 0) return;
 
-    this.renderer.setPixelRatio(1);
-    const aspect = w / h;
-    const rtH = 360;
-    const rtW = Math.max(480, Math.min(960, Math.round(rtH * aspect)));
+    this.cssWidth = w;
+    this.cssHeight = h;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.renderer.setPixelRatio(dpr);
+    this.renderer.setSize(w, h, false);
+
+    const rtW = Math.max(1, Math.floor(w * dpr));
+    const rtH = Math.max(1, Math.floor(h * dpr));
     this.postProcessor.setSize(rtW, rtH);
-    this.renderer.setSize(rtW, rtH, false);
   }
 
   private animate = (): void => {
@@ -5599,7 +5795,7 @@ export class Buckshot3DEngine {
       this.postProcessor.setFlash(0.0);
     }
 
-    // 1. Aşama: Sahneyi düşük iç çözünürlüklü NearestFilter WebGLRenderTarget'a çiz
+    // 1. Aşama: Sahneyi tam HD (clientWidth * dpr x clientHeight * dpr) MSAA WebGLRenderTarget'a çiz
     this.renderer.setRenderTarget(this.postProcessor.renderTarget);
 
     if (this.currentState.mode === "solo") {
@@ -5628,10 +5824,10 @@ export class Buckshot3DEngine {
       this.renderer.render(this.scene, this.camP2);
     }
 
-    // 2. Aşama: 4x4 Ordered Bayer Dithering + Color Quantization Shader Quad ile ekrana bas
+    // 2. Aşama: 1px Mikro-Dither + 1080p Kontrast/Vignette Shader Quad ile ekrana bas
     this.renderer.setScissorTest(false);
     this.renderer.setRenderTarget(null);
-    this.renderer.setViewport(0, 0, this.canvas.width, this.canvas.height);
+    this.renderer.setViewport(0, 0, this.cssWidth, this.cssHeight);
     this.postProcessor.renderToScreen(this.renderer);
   }
 

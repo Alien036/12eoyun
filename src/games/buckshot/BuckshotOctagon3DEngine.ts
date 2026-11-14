@@ -8,6 +8,7 @@ import {
   buildPorcelainNightmareHead,
   buildRivetedWelderBallisticHead,
   buildSovietGasMaskHead,
+  configureSharpTexture,
   create3DItemModel,
   createBrushedSteelTexture,
   createChalkLabelTexture,
@@ -138,15 +139,15 @@ function createOctagonFeltTextures(): {
   const ctx = canvas.getContext("2d")!;
 
   const bumpCanvas = document.createElement("canvas");
-  bumpCanvas.width = 512;
-  bumpCanvas.height = 512;
+  bumpCanvas.width = 1024;
+  bumpCanvas.height = 1024;
   const bCtx = bumpCanvas.getContext("2d")!;
 
   ctx.fillStyle = "#0e2217";
   ctx.fillRect(0, 0, 1024, 1024);
 
   bCtx.fillStyle = "#808080";
-  bCtx.fillRect(0, 0, 512, 512);
+  bCtx.fillRect(0, 0, 1024, 1024);
 
   const grad = ctx.createRadialGradient(512, 512, 90, 512, 512, 500);
   grad.addColorStop(0, "rgba(38, 88, 58, 0.55)");
@@ -155,21 +156,21 @@ function createOctagonFeltTextures(): {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 1024, 1024);
 
-  for (let i = 0; i < 18000; i++) {
+  for (let i = 0; i < 24000; i++) {
     const x = Math.random() * 1024;
     const y = Math.random() * 1024;
     ctx.fillStyle =
       Math.random() < 0.6
         ? `rgba(2, 6, 4, ${Math.random() * 0.32})`
         : `rgba(62, 122, 82, ${Math.random() * 0.14})`;
-    ctx.fillRect(x, y, 2.5, 2.5);
+    ctx.fillRect(x, y, 2, 2);
   }
 
   // Sekizgen dış tebeşir çerçevesi
   ctx.save();
   ctx.translate(512, 512);
-  ctx.strokeStyle = "rgba(226, 232, 220, 0.65)";
-  ctx.lineWidth = 5;
+  ctx.strokeStyle = "rgba(241, 245, 249, 0.85)";
+  ctx.lineWidth = 4.5;
   ctx.beginPath();
   for (let i = 0; i < 8; i++) {
     const ang = (i * Math.PI) / 4 + Math.PI / 8;
@@ -183,14 +184,14 @@ function createOctagonFeltTextures(): {
   ctx.stroke();
 
   // Merkez beyaz tebeşir çember ve taret halkası şablon çizgileri
-  ctx.strokeStyle = "rgba(236, 240, 232, 0.85)";
-  ctx.lineWidth = 6;
+  ctx.strokeStyle = "rgba(248, 250, 252, 0.92)";
+  ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.arc(0, 0, 152, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(245, 158, 11, 0.62)";
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = "rgba(245, 158, 11, 0.72)";
+  ctx.lineWidth = 3.5;
   ctx.beginPath();
   ctx.arc(0, 0, 138, 0, Math.PI * 2);
   ctx.stroke();
@@ -203,12 +204,12 @@ function createOctagonFeltTextures(): {
     // "DO NOT CROSS" sarı-beyaz endüstriyel uyarı şeridi
     ctx.fillStyle = "rgba(245, 158, 11, 0.16)";
     ctx.fillRect(-165, 165, 330, 30);
-    ctx.strokeStyle = "rgba(251, 191, 36, 0.65)";
+    ctx.strokeStyle = "rgba(251, 191, 36, 0.75)";
     ctx.lineWidth = 2;
     ctx.strokeRect(-165, 165, 330, 30);
 
     ctx.font = "900 18px monospace";
-    ctx.fillStyle = "rgba(253, 230, 138, 0.78)";
+    ctx.fillStyle = "rgba(253, 230, 138, 0.88)";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("⚠ DO NOT CROSS ⚠", 0, 180);
@@ -216,13 +217,13 @@ function createOctagonFeltTextures(): {
     // Her oyuncunun tam ön ortasında gömülü siyah dikdörtgen sandık kapağı (Recessed Black Hatch)
     ctx.fillStyle = "#040507";
     ctx.fillRect(-38, 226, 76, 114);
-    ctx.strokeStyle = "rgba(232, 238, 226, 0.72)";
+    ctx.strokeStyle = "rgba(248, 250, 252, 0.85)";
     ctx.lineWidth = 3;
     ctx.strokeRect(-38, 226, 76, 114);
 
     // Sol 4 ve Sağ 4 beyaz eşya yuvası
-    ctx.strokeStyle = "rgba(232, 238, 226, 0.78)";
-    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = "rgba(248, 250, 252, 0.88)";
+    ctx.lineWidth = 3.2;
     const cols = [-168, -98, 42, 112];
     const rows = [218, 292];
     cols.forEach((cx) => {
@@ -236,12 +237,10 @@ function createOctagonFeltTextures(): {
   ctx.restore();
 
   const map = new THREE.CanvasTexture(canvas);
-  map.magFilter = THREE.NearestFilter;
-  map.minFilter = THREE.NearestFilter;
-  map.needsUpdate = true;
+  configureSharpTexture(map, 16);
 
   const bumpMap = new THREE.CanvasTexture(bumpCanvas);
-  bumpMap.needsUpdate = true;
+  configureSharpTexture(bumpMap, 16);
 
   return { map, bumpMap };
 }
@@ -412,11 +411,12 @@ export class BuckshotOctagon3DEngine {
 
   private lastItemsHash = "";
   private lastRevealHash = "";
+  private cssWidth = 1280;
+  private cssHeight = 720;
 
   constructor(container: HTMLElement) {
     this.canvas = document.createElement("canvas");
     this.canvas.className = "w-full h-full block";
-    this.canvas.style.imageRendering = "pixelated";
     container.appendChild(this.canvas);
 
     this.clock = new THREE.Clock();
@@ -481,11 +481,11 @@ export class BuckshotOctagon3DEngine {
       this.scene.add(this.selfTargets[seat]);
     });
 
-    this.postProcessor = new RetroBayerPostProcessor(640, 360);
+    this.postProcessor = new RetroBayerPostProcessor(1920, 1080);
 
     try {
-      const gl = (this.canvas.getContext("webgl2", { antialias: false }) ||
-        this.canvas.getContext("webgl", { antialias: false })) as
+      const gl = (this.canvas.getContext("webgl2", { antialias: true }) ||
+        this.canvas.getContext("webgl", { antialias: true })) as
         | WebGLRenderingContext
         | WebGL2RenderingContext
         | null;
@@ -494,18 +494,39 @@ export class BuckshotOctagon3DEngine {
         throw new Error("WebGL grafik bağlamı oluşturulamadı.");
       }
 
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       this.renderer = new THREE.WebGLRenderer({
         canvas: this.canvas,
         context: gl as WebGLRenderingContext,
-        antialias: false,
+        antialias: true,
         powerPreference: "default",
       });
-      this.renderer.setPixelRatio(1);
+      this.renderer.setPixelRatio(dpr);
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 0.94;
       this.renderer.setClearColor(0x000000, 1);
+
+      const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
+      this.scene.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.material) return;
+        const mats = Array.isArray(mesh.material)
+          ? mesh.material
+          : [mesh.material];
+        mats.forEach((m) => {
+          const std = m as THREE.MeshStandardMaterial;
+          if (std.map) {
+            std.map.anisotropy = maxAniso;
+            std.map.needsUpdate = true;
+          }
+          if (std.bumpMap) {
+            std.bumpMap.anisotropy = maxAniso;
+            std.bumpMap.needsUpdate = true;
+          }
+        });
+      });
     } catch (err) {
       this.initError =
         err instanceof Error
@@ -1778,12 +1799,15 @@ export class BuckshotOctagon3DEngine {
     if (!parent) return;
     const w = Math.max(1, parent.clientWidth);
     const h = Math.max(1, parent.clientHeight);
-    this.renderer.setPixelRatio(1);
-    const aspect = w / h;
-    const rtH = 420;
-    const rtW = Math.max(520, Math.min(980, Math.round(rtH * aspect)));
+    this.cssWidth = w;
+    this.cssHeight = h;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.renderer.setPixelRatio(dpr);
+    this.renderer.setSize(w, h, false);
+
+    const rtW = Math.max(1, Math.floor(w * dpr));
+    const rtH = Math.max(1, Math.floor(h * dpr));
     this.postProcessor.setSize(rtW, rtH);
-    this.renderer.setSize(rtW, rtH, false);
   }
 
   private animate = (): void => {
@@ -2069,7 +2093,7 @@ export class BuckshotOctagon3DEngine {
 
     this.renderer.setScissorTest(false);
     this.renderer.setRenderTarget(null);
-    this.renderer.setViewport(0, 0, this.canvas.width, this.canvas.height);
+    this.renderer.setViewport(0, 0, this.cssWidth, this.cssHeight);
     this.postProcessor.renderToScreen(this.renderer);
   }
 
