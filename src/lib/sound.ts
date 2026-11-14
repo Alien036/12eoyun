@@ -1482,6 +1482,113 @@ class ArcadeSoundEngine {
     clink.start(now);
     clink.stop(now + 0.045);
   }
+
+  // Sekizgen Masa Merkezi Döner Tüfek Halkası (Rotating Turret Ring) Mekanik Dönüş Sesi
+  public playTurretRotate(): void {
+    if (this.muted) return;
+    this.vibrate([10, 18, 12]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Dişli çark / rulman dönüş uğultusu
+    const servo = ctx.createOscillator();
+    const sGain = ctx.createGain();
+    servo.type = "sawtooth";
+    servo.frequency.setValueAtTime(95, now);
+    servo.frequency.linearRampToValueAtTime(145, now + 0.14);
+    servo.frequency.exponentialRampToValueAtTime(72, now + 0.28);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(520, now);
+    sGain.gain.setValueAtTime(0.16, now);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.29);
+    servo.connect(filter);
+    filter.connect(sGain);
+    sGain.connect(ctx.destination);
+    servo.start(now);
+    servo.stop(now + 0.3);
+
+    // 3 adet mekanik kilit mandalı tıkırtısı
+    [0.04, 0.12, 0.22].forEach((off, i) => {
+      const t = now + off;
+      const click = ctx.createOscillator();
+      const cGain = ctx.createGain();
+      click.type = "triangle";
+      click.frequency.setValueAtTime(1120 + i * 160, t);
+      click.frequency.exponentialRampToValueAtTime(340, t + 0.025);
+      cGain.gain.setValueAtTime(0.18, t);
+      cGain.gain.exponentialRampToValueAtTime(0.001, t + 0.028);
+      click.connect(cGain);
+      cGain.connect(ctx.destination);
+      click.start(t);
+      click.stop(t + 0.03);
+    });
+  }
+
+  // Uzaktan Kumanda (Remote): Tur Dönüş Yönünü Tersine Çevirme Röle & Bip Sesi
+  public playTurretReverse(): void {
+    if (this.muted) return;
+    this.vibrate([18, 25, 22]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Çift tonlu elektronik sinyal
+    [
+      { off: 0, freq: 880 },
+      { off: 0.075, freq: 1320 },
+    ].forEach((b) => {
+      const t = now + b.off;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(b.freq, t);
+      g.gain.setValueAtTime(0.12, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.065);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.07);
+    });
+
+    this.playTurretRotate();
+  }
+
+  // Elenme Efekti (Spotlight Off): Ağır Şalter *ÇAT!* Kapanışı ve Güç Düşüşü
+  public playSpotlightOff(): void {
+    if (this.muted) return;
+    this.vibrate([35, 30, 45]);
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Katman 1: Endüstriyel şalter *ÇAT!* darbesi
+    const clunk = ctx.createOscillator();
+    const cGain = ctx.createGain();
+    clunk.type = "square";
+    clunk.frequency.setValueAtTime(460, now);
+    clunk.frequency.exponentialRampToValueAtTime(58, now + 0.09);
+    cGain.gain.setValueAtTime(0.32, now);
+    cGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    clunk.connect(cGain);
+    cGain.connect(ctx.destination);
+    clunk.start(now);
+    clunk.stop(now + 0.11);
+
+    // Katman 2: Transformatör güç kesilme çöküşü
+    const down = ctx.createOscillator();
+    const dGain = ctx.createGain();
+    down.type = "sawtooth";
+    down.frequency.setValueAtTime(220, now + 0.04);
+    down.frequency.exponentialRampToValueAtTime(32, now + 0.48);
+    dGain.gain.setValueAtTime(0.22, now + 0.04);
+    dGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    down.connect(dGain);
+    dGain.connect(ctx.destination);
+    down.start(now + 0.04);
+    down.stop(now + 0.52);
+  }
 }
 
 export const sound = new ArcadeSoundEngine();

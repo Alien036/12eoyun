@@ -1206,7 +1206,7 @@ export interface MultiplayerFinalStanding extends MultiplayerStandingInput {
 
 // 2-4 Kişilik Akıllı Tahta Maçı Bittiğinde Tüm Gerçek Oyuncuların Firestore İstatistiklerini Güncelle
 export async function recordMultiplayerMatchResult(params: {
-  game: MultiplayerGameKey;
+  game: MultiplayerGameKey | "buckshot";
   standings: MultiplayerStandingInput[];
   modeLabel?: string;
   customFeedMessage?: string;
@@ -1221,6 +1221,13 @@ export async function recordMultiplayerMatchResult(params: {
 
     if (typeof st.customFinalScore === "number") {
       rawFinal = st.customFinalScore;
+    } else if (params.game === "buckshot") {
+      const champBase = totalPlayers >= 4 ? 4200 : 3800;
+      const bonus = Math.min(1100, cleanAction);
+      if (st.rank === 1) rawFinal = champBase + bonus;
+      else if (st.rank === 2) rawFinal = 2000 + Math.round(bonus * 0.45);
+      else if (st.rank === 3) rawFinal = 1100 + Math.round(bonus * 0.35);
+      else rawFinal = 500 + Math.round(bonus * 0.25);
     } else if (params.game === "liarsRoulette") {
       const champBase = totalPlayers >= 4 ? 3600 : totalPlayers === 3 ? 3200 : 2800;
       const bonus = Math.min(900, cleanAction);

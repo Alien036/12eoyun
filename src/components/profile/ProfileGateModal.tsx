@@ -808,7 +808,7 @@ export default function ProfileGateModal({
                               }`}
                             >
                               <div className="text-xs font-black">
-                                Tam 3 Rauntluk Seri
+                                3 Rauntluk Seri
                               </div>
                               <div className="text-[10px] text-slate-300">
                                 2⚡ • 4⚡ • 5⚡ (Kesik Kablo Finali)
@@ -827,80 +827,195 @@ export default function ProfileGateModal({
                               }`}
                             >
                               <div className="text-xs font-black">
-                                Hızlı Tek Raunt (5⚡)
+                                Hızlı Hayatta Kalma (Tek Raunt)
                               </div>
                               <div className="text-[10px] text-slate-300">
-                                Teneffüs Modu • Tek Maç
+                                5⚡ • Son Kalan Kazanır
                               </div>
                             </button>
                           </div>
                         </div>
                       )}
 
-                      <motion.button
-                        type="button"
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.96 }}
-                        transition={SPRING_GATE}
-                        onClick={() => {
-                          sound.playClick();
-                          setSelectedMode("solo");
-                          setStep("pick_player");
-                          setSubView(players.length > 0 ? "list" : "create");
-                        }}
-                        className="w-full min-h-[64px] flex items-center gap-4 rounded-2xl border border-cyan-400/35 bg-gradient-to-r from-cyan-500/15 to-indigo-600/15 hover:border-cyan-300 p-4 text-left transition-colors cursor-pointer"
-                      >
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-500/25 text-cyan-300">
-                          <Bot className="h-6 w-6" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-black text-white">
-                            {targetGame === "buckshot"
-                              ? "Krupiye'ye Karşı (Tek Kişilik — Dealer AI)"
-                              : "Tek Kişilik (Yapay Zeka / Arcade)"}
-                          </div>
-                          <p className="mt-0.5 text-xs text-slate-300">
-                            {targetGame === "buckshot"
-                              ? "Eldivenli yeraltı Krupiyesine karşı 9 orijinal eşya ve pompalı tüfekle psikolojik düello!"
-                              : targetGame === "wireRoulette"
-                              ? "Başmühendis Bot'a karşı 8 gergin kablolu sigorta kutusunda hayatta kalma mücadelesi."
-                              : targetGame === "chess"
-                              ? "Kolay, Orta veya Zor seviyeli akıllı satranç botuna karşı oyna."
-                              : "15 topu en az vuruşla ve seri kombosuyla deliklere sokarak rekor kır."}
-                          </p>
-                        </div>
-                      </motion.button>
-
-                      {supportsDuel && (
-                        <motion.button
-                          type="button"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.96 }}
-                          transition={SPRING_GATE}
-                          onClick={() => {
-                            sound.playClick();
-                            setSelectedMode("duel");
-                            setTargetSeatCount(2);
-                            setCurrentSeatIndex(0);
-                            setVerifiedSeats([]);
-                            setStep("pick_player");
-                            setSubView(players.length > 0 ? "list" : "create");
-                          }}
-                          className="w-full min-h-[64px] flex items-center gap-4 rounded-2xl border border-amber-400/40 bg-gradient-to-r from-amber-500/15 to-fuchsia-600/15 hover:border-amber-300 p-4 text-left transition-colors cursor-pointer"
-                        >
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500/25 text-amber-300">
-                            <Swords className="h-6 w-6" />
-                          </div>
-                          <div>
-                            <div className="text-sm font-black text-white">
-                              Sınıf Arkadaşıyla Düello (2 Kişilik - Aynı Cihaz)
+                      {targetGame === "buckshot" ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <motion.button
+                            type="button"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.96 }}
+                            transition={SPRING_GATE}
+                            onClick={() => {
+                              sound.playClick();
+                              setSelectedMode("solo");
+                              setStep("pick_player");
+                              setSubView(players.length > 0 ? "list" : "create");
+                            }}
+                            className="min-h-[76px] flex items-center gap-3 rounded-2xl border border-cyan-400/35 bg-gradient-to-r from-cyan-500/15 to-indigo-600/15 hover:border-cyan-300 p-3.5 text-left transition-colors cursor-pointer"
+                          >
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-500/25 text-cyan-300">
+                              <Bot className="h-5 w-5" />
                             </div>
-                            <p className="mt-0.5 text-xs text-slate-300">
-                              İki oyuncu da Hayalet PIN ile kendi profilini
-                              açar; VS arenasında kapışır!
-                            </p>
-                          </div>
-                        </motion.button>
+                            <div>
+                              <div className="text-xs sm:text-sm font-black text-white">
+                                Krupiye (1P)
+                              </div>
+                              <p className="mt-0.5 text-[11px] text-slate-300 leading-snug">
+                                Eldivenli yeraltı Krupiyesine karşı 3D düello!
+                              </p>
+                            </div>
+                          </motion.button>
+
+                          <motion.button
+                            type="button"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.96 }}
+                            transition={SPRING_GATE}
+                            onClick={() => {
+                              sound.playClick();
+                              setSelectedMode("duel");
+                              setTargetSeatCount(2);
+                              setCurrentSeatIndex(0);
+                              setVerifiedSeats([]);
+                              setStep("pick_player");
+                              setSubView(players.length > 0 ? "list" : "create");
+                            }}
+                            className="min-h-[76px] flex items-center gap-3 rounded-2xl border border-amber-400/40 bg-gradient-to-r from-amber-500/15 to-red-600/15 hover:border-amber-300 p-3.5 text-left transition-colors cursor-pointer"
+                          >
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/25 text-amber-300">
+                              <Swords className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="text-xs sm:text-sm font-black text-white">
+                                2 Kişi Düello
+                              </div>
+                              <p className="mt-0.5 text-[11px] text-slate-300 leading-snug">
+                                %50 / %50 Bölünmüş Çift Kamera (Dual-POV)
+                              </p>
+                            </div>
+                          </motion.button>
+
+                          <motion.button
+                            type="button"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.96 }}
+                            transition={SPRING_GATE}
+                            onClick={() => {
+                              sound.playClick();
+                              setSelectedMode("multiplayer");
+                              setTargetSeatCount(3);
+                              setCurrentSeatIndex(0);
+                              setVerifiedSeats([]);
+                              setStep("pick_player");
+                              setSubView(players.length > 0 ? "list" : "create");
+                            }}
+                            className="min-h-[76px] flex items-center gap-3 rounded-2xl border border-emerald-400/40 bg-gradient-to-r from-emerald-500/15 to-teal-700/15 hover:border-emerald-300 p-3.5 text-left transition-colors cursor-pointer"
+                          >
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/25 text-emerald-300">
+                              <Users className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="text-xs sm:text-sm font-black text-white">
+                                3 Kişi Masa
+                              </div>
+                              <p className="mt-0.5 text-[11px] text-slate-300 leading-snug">
+                                3D Sekizgen Masa • 3 Kamera + CCTV Tepe Kamerası
+                              </p>
+                            </div>
+                          </motion.button>
+
+                          <motion.button
+                            type="button"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.96 }}
+                            transition={SPRING_GATE}
+                            onClick={() => {
+                              sound.playClick();
+                              setSelectedMode("multiplayer");
+                              setTargetSeatCount(4);
+                              setCurrentSeatIndex(0);
+                              setVerifiedSeats([]);
+                              setStep("pick_player");
+                              setSubView(players.length > 0 ? "list" : "create");
+                            }}
+                            className="min-h-[76px] flex items-center gap-3 rounded-2xl border border-rose-400/45 bg-gradient-to-r from-rose-500/20 to-amber-600/20 hover:border-rose-300 p-3.5 text-left transition-colors cursor-pointer"
+                          >
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/25 text-rose-300">
+                              <Zap className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="text-xs sm:text-sm font-black text-white">
+                                4 Kişi Kaos
+                              </div>
+                              <p className="mt-0.5 text-[11px] text-slate-300 leading-snug">
+                                2x2 Quad Split-Screen • Döner Tüfek Halkası & Jammer
+                              </p>
+                            </div>
+                          </motion.button>
+                        </div>
+                      ) : (
+                        <>
+                          <motion.button
+                            type="button"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.96 }}
+                            transition={SPRING_GATE}
+                            onClick={() => {
+                              sound.playClick();
+                              setSelectedMode("solo");
+                              setStep("pick_player");
+                              setSubView(players.length > 0 ? "list" : "create");
+                            }}
+                            className="w-full min-h-[64px] flex items-center gap-4 rounded-2xl border border-cyan-400/35 bg-gradient-to-r from-cyan-500/15 to-indigo-600/15 hover:border-cyan-300 p-4 text-left transition-colors cursor-pointer"
+                          >
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-500/25 text-cyan-300">
+                              <Bot className="h-6 w-6" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-black text-white">
+                                Tek Kişilik (Yapay Zeka / Arcade)
+                              </div>
+                              <p className="mt-0.5 text-xs text-slate-300">
+                                {targetGame === "wireRoulette"
+                                  ? "Başmühendis Bot'a karşı 8 gergin kablolu sigorta kutusunda hayatta kalma mücadelesi."
+                                  : targetGame === "chess"
+                                  ? "Kolay, Orta veya Zor seviyeli akıllı satranç botuna karşı oyna."
+                                  : "15 topu en az vuruşla ve seri kombosuyla deliklere sokarak rekor kır."}
+                              </p>
+                            </div>
+                          </motion.button>
+
+                          {supportsDuel && (
+                            <motion.button
+                              type="button"
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.96 }}
+                              transition={SPRING_GATE}
+                              onClick={() => {
+                                sound.playClick();
+                                setSelectedMode("duel");
+                                setTargetSeatCount(2);
+                                setCurrentSeatIndex(0);
+                                setVerifiedSeats([]);
+                                setStep("pick_player");
+                                setSubView(players.length > 0 ? "list" : "create");
+                              }}
+                              className="w-full min-h-[64px] flex items-center gap-4 rounded-2xl border border-amber-400/40 bg-gradient-to-r from-amber-500/15 to-fuchsia-600/15 hover:border-amber-300 p-4 text-left transition-colors cursor-pointer"
+                            >
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500/25 text-amber-300">
+                                <Swords className="h-6 w-6" />
+                              </div>
+                              <div>
+                                <div className="text-sm font-black text-white">
+                                  Sınıf Arkadaşıyla Düello (2 Kişilik - Aynı Cihaz)
+                                </div>
+                                <p className="mt-0.5 text-xs text-slate-300">
+                                  İki oyuncu da Hayalet PIN ile kendi profilini
+                                  açar; VS arenasında kapışır!
+                                </p>
+                              </div>
+                            </motion.button>
+                          )}
+                        </>
                       )}
                     </div>
                   ) : subView === "pin" && candidate ? (
@@ -1068,9 +1183,7 @@ export default function ProfileGateModal({
                   ) : subView === "list" ? (
                     /* Sınıf Listesi */
                     <div className="space-y-3">
-                      {((supportsDuel &&
-                        selectedMode !== "multiplayer" &&
-                        currentSeatIndex === 0) ||
+                      {((supportsDuel && currentSeatIndex === 0) ||
                         (isMultiArena && currentSeatIndex === 0)) && (
                         <button
                           type="button"

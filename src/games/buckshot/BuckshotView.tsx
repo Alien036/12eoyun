@@ -17,6 +17,7 @@ import {
   clampGameScore,
   recordDuelGameResult,
   recordSoloGameResult,
+  type MultiplayerSeat,
   type PlayerDoc,
 } from "@/lib/firestore";
 import { sound } from "@/lib/sound";
@@ -24,6 +25,7 @@ import {
   Buckshot3DEngine,
   type CrateDealEntry,
 } from "./Buckshot3DEngine";
+import BuckshotMultiplayerView from "./BuckshotMultiplayerView";
 
 export type ShellType = "live" | "blank";
 
@@ -36,7 +38,9 @@ export type BuckshotItemKey =
   | "inverter"
   | "burnerPhone"
   | "adrenaline"
-  | "expiredMed";
+  | "expiredMed"
+  | "jammer"
+  | "remote";
 
 export interface BuckshotItemMeta {
   key: BuckshotItemKey;
@@ -120,6 +124,22 @@ export const BUCKSHOT_ITEMS: Record<BuckshotItemKey, BuckshotItemMeta> = {
     desc: "%50 şansla +2⚡ can verir, %50 şansla zehirleyip -1⚡ can götürür.",
     accentClass: "border-lime-400/60 bg-lime-950/75 text-lime-200",
   },
+  jammer: {
+    key: "jammer",
+    name: "SİNYAL KESİCİ",
+    shortName: "Sinyal Kesici",
+    icon: "📡",
+    desc: "Seçtiğin bir rakibin monitörünü kilitler; o rakip sırasını pas geçer.",
+    accentClass: "border-red-400/70 bg-red-950/80 text-red-200",
+  },
+  remote: {
+    key: "remote",
+    name: "UZAKTAN KUMANDA",
+    shortName: "Kumanda ↻⇄↺",
+    icon: "🎛️",
+    desc: "Merkez taret LED oklarını ve sıra dönüş yönünü tersine çevirir (↻ ⇄ ↺).",
+    accentClass: "border-amber-400/70 bg-amber-950/80 text-amber-200",
+  },
 };
 
 const ALL_ITEM_KEYS: BuckshotItemKey[] = [
@@ -168,9 +188,10 @@ interface SecretPeekData {
 }
 
 interface BuckshotViewProps {
-  mode: "solo" | "duel";
+  mode: "solo" | "duel" | "multiplayer";
   player1: PlayerDoc;
   player2?: PlayerDoc;
+  seats?: MultiplayerSeat[];
   initialSubMode?: string; // "series3" | "fast1"
   allPlayers: PlayerDoc[];
   onBackToHub: () => void;
@@ -178,7 +199,25 @@ interface BuckshotViewProps {
   onComboEnergyChange?: (energy: number) => void;
 }
 
-export default function BuckshotView({
+export default function BuckshotView(props: BuckshotViewProps) {
+  if (
+    props.mode === "multiplayer" &&
+    props.seats &&
+    props.seats.length >= 3
+  ) {
+    return (
+      <BuckshotMultiplayerView
+        seats={props.seats}
+        initialSubMode={props.initialSubMode}
+        onBackToMenu={props.onBackToHub}
+        onRequireAuth={() => props.onRequestNewGameWithGate()}
+      />
+    );
+  }
+  return <BuckshotSoloDuelView {...props} mode={props.mode === "duel" ? "duel" : "solo"} />;
+}
+
+function BuckshotSoloDuelView({
   mode,
   player1,
   player2,
@@ -187,7 +226,7 @@ export default function BuckshotView({
   onBackToHub,
   onRequestNewGameWithGate,
   onComboEnergyChange,
-}: BuckshotViewProps) {
+}: BuckshotViewProps & { mode: "solo" | "duel" }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<Buckshot3DEngine | null>(null);
   const [webglError, setWebglError] = useState<string | null>(null);

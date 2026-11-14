@@ -103,7 +103,7 @@ interface FallingBarrelPiece {
   settled: boolean;
 }
 
-const ITEM_3D_LABELS: Record<BuckshotItemKey, string> = {
+export const ITEM_3D_LABELS: Record<BuckshotItemKey, string> = {
   soda: "İÇECEK",
   handcuffs: "KELEPÇE",
   handsaw: "TESTERE",
@@ -113,6 +113,8 @@ const ITEM_3D_LABELS: Record<BuckshotItemKey, string> = {
   burnerPhone: "TELEFON",
   adrenaline: "ADRENALİN",
   expiredMed: "BOZUK İLAÇ",
+  jammer: "SİNYAL KESİCİ",
+  remote: "KUMANDA ↻⇄↺",
 };
 
 // ============================================================================
@@ -293,7 +295,7 @@ function createFeltTableTextures(): {
   return { map, bumpMap, roughnessMap: bumpMap };
 }
 
-function createGrungeBrickTextures(): {
+export function createGrungeBrickTextures(): {
   map: THREE.CanvasTexture;
   bumpMap: THREE.CanvasTexture;
   roughnessMap: THREE.CanvasTexture;
@@ -379,7 +381,7 @@ function createGrungeBrickTextures(): {
   return { map, bumpMap, roughnessMap: bumpMap };
 }
 
-function createRustyMetalTextures(): {
+export function createRustyMetalTextures(): {
   map: THREE.CanvasTexture;
   bumpMap: THREE.CanvasTexture;
 } {
@@ -429,7 +431,7 @@ function createRustyMetalTextures(): {
   return { map, bumpMap };
 }
 
-function createWalnutWoodTextures(): {
+export function createWalnutWoodTextures(): {
   map: THREE.CanvasTexture;
   bumpMap: THREE.CanvasTexture;
 } {
@@ -482,7 +484,7 @@ function createWalnutWoodTextures(): {
   return { map, bumpMap };
 }
 
-function createBrushedSteelTexture(): THREE.CanvasTexture {
+export function createBrushedSteelTexture(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 512;
@@ -598,7 +600,7 @@ function createBandageTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-function createChalkLabelTexture(
+export function createChalkLabelTexture(
   text: string,
   active: boolean,
   stealMode: boolean
@@ -642,7 +644,7 @@ function createChalkLabelTexture(
   return tex;
 }
 
-function createTargetBadgeTexture(
+export function createTargetBadgeTexture(
   title: string,
   subtitle: string,
   isEnemy: boolean
@@ -679,7 +681,7 @@ function createTargetBadgeTexture(
 // 9 YÜKSEK DETAYLI FİZİKSEL 3D EŞYA MODELİ (%28 BÜYÜTÜLMÜŞ)
 // ============================================================================
 
-function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
+export function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
   const group = new THREE.Group();
 
   switch (itemKey) {
@@ -1019,6 +1021,145 @@ function create3DItemModel(itemKey: BuckshotItemKey): THREE.Group {
       group.add(cap);
       break;
     }
+
+    case "jammer": {
+      // 10. Sinyal Kesici (Jammer — Açık Yeşil PCB Devre Kartı + Bakır Bobin + Kapasitörler + Kırmızı LED + Çift Anten)
+      const pcbMat = new THREE.MeshStandardMaterial({
+        color: 0x064e3b,
+        roughness: 0.42,
+        metalness: 0.35,
+      });
+      const pcbBoard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.045, 0.28),
+        pcbMat
+      );
+      pcbBoard.position.y = 0.04;
+      pcbBoard.castShadow = true;
+      group.add(pcbBoard);
+
+      // Bakır tel sargılı bobin (Toroid / Copper Coil)
+      const copperMat = new THREE.MeshStandardMaterial({
+        color: 0xd97706,
+        metalness: 0.88,
+        roughness: 0.22,
+      });
+      const coil = new THREE.Mesh(
+        new THREE.TorusGeometry(0.065, 0.024, 8, 16),
+        copperMat
+      );
+      coil.rotation.x = Math.PI / 2;
+      coil.position.set(-0.07, 0.085, 0.02);
+      group.add(coil);
+
+      // Silindirik Elektrolitik Kapasitörler
+      const capMat = new THREE.MeshStandardMaterial({
+        color: 0x1e293b,
+        metalness: 0.72,
+        roughness: 0.3,
+      });
+      [0.05, 0.12].forEach((cx, idx) => {
+        const cCyl = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.028, 0.028, 0.11, 10),
+          capMat
+        );
+        cCyl.position.set(cx, 0.11, -0.04 + idx * 0.07);
+        group.add(cCyl);
+      });
+
+      // Parlayan Kırmızı Sinyal Kesici LED
+      const redLed = new THREE.Mesh(
+        new THREE.SphereGeometry(0.032, 8, 8),
+        new THREE.MeshStandardMaterial({
+          color: 0xef4444,
+          emissive: 0xdc2626,
+          emissiveIntensity: 1.15,
+        })
+      );
+      redLed.position.set(0, 0.095, 0.085);
+      group.add(redLed);
+
+      // Çift Metal Sinyal Anteni
+      const antMat = new THREE.MeshStandardMaterial({
+        color: 0xcbd5e1,
+        metalness: 0.92,
+        roughness: 0.18,
+      });
+      [-0.11, 0.11].forEach((ax) => {
+        const ant = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.01, 0.014, 0.28, 8),
+          antMat
+        );
+        ant.position.set(ax, 0.18, -0.11);
+        ant.rotation.z = ax < 0 ? 0.16 : -0.16;
+        group.add(ant);
+      });
+      break;
+    }
+
+    case "remote": {
+      // 11. Uzaktan Kumanda (Remote — Açık Devre Kartlı Endüstriyel Kumanda + Büyük Turuncu Yön Tuşu + Kehribar LED)
+      const baseMat = new THREE.MeshStandardMaterial({
+        color: 0x1c1917,
+        roughness: 0.48,
+        metalness: 0.55,
+      });
+      const chassis = new THREE.Mesh(
+        new THREE.BoxGeometry(0.24, 0.07, 0.36),
+        baseMat
+      );
+      chassis.position.y = 0.045;
+      chassis.castShadow = true;
+      group.add(chassis);
+
+      // Üst açık yeşil PCB şeridi
+      const pcbStrip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.19, 0.02, 0.3),
+        new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.4 })
+      );
+      pcbStrip.position.y = 0.085;
+      group.add(pcbStrip);
+
+      // Büyük Parlak Kehribar/Turuncu Yön Değiştirme Butonu (↻ ⇄ ↺)
+      const mainBtn = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.062, 0.068, 0.055, 14),
+        new THREE.MeshStandardMaterial({
+          color: 0xf59e0b,
+          emissive: 0xd97706,
+          emissiveIntensity: 0.85,
+          roughness: 0.25,
+        })
+      );
+      mainBtn.position.set(0, 0.115, 0.04);
+      group.add(mainBtn);
+
+      // İki Yönlü Yeşil/Kehribar Durum LED'leri
+      [-0.055, 0.055].forEach((lx, i) => {
+        const dirLed = new THREE.Mesh(
+          new THREE.SphereGeometry(0.022, 8, 8),
+          new THREE.MeshStandardMaterial({
+            color: i === 0 ? 0x22c55e : 0x38bdf8,
+            emissive: i === 0 ? 0x16a34a : 0x0284c7,
+            emissiveIntensity: 1.0,
+          })
+        );
+        dirLed.position.set(lx, 0.1, -0.09);
+        group.add(dirLed);
+      });
+
+      // Kızılötesi / RF verici diyot
+      const emitter = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.022, 0.022, 0.06, 10),
+        new THREE.MeshStandardMaterial({
+          color: 0x38bdf8,
+          emissive: 0x0284c7,
+          emissiveIntensity: 0.9,
+        })
+      );
+      emitter.rotation.x = Math.PI / 2;
+      emitter.position.set(0, 0.055, -0.19);
+      group.add(emitter);
+      break;
+    }
   }
 
   group.scale.setScalar(1.28);
@@ -1045,7 +1186,7 @@ interface AvatarRig {
   porcelainHeadGroup?: THREE.Group;
 }
 
-function buildSovietGasMaskHead(): THREE.Group {
+export function buildSovietGasMaskHead(): THREE.Group {
   const head = new THREE.Group();
 
   const rubberMat = new THREE.MeshStandardMaterial({
@@ -1171,7 +1312,7 @@ function buildSovietGasMaskHead(): THREE.Group {
   return head;
 }
 
-function buildPorcelainNightmareHead(): THREE.Group {
+export function buildPorcelainNightmareHead(): THREE.Group {
   const head = new THREE.Group();
   const porcelainTex = createCrackedPorcelainTexture();
 
@@ -1263,24 +1404,259 @@ function buildPorcelainNightmareHead(): THREE.Group {
   return head;
 }
 
-function buildDetailedHand(
+export function buildIndustrialRespiratorHead(): THREE.Group {
+  const head = new THREE.Group();
+
+  const whiteMaskMat = new THREE.MeshStandardMaterial({
+    color: 0xd6d3d1,
+    roughness: 0.42,
+    metalness: 0.16,
+  });
+  const hoodClothMat = new THREE.MeshStandardMaterial({
+    color: 0x1c1917,
+    roughness: 0.85,
+  });
+  const filterCartridgeMat = new THREE.MeshStandardMaterial({
+    color: 0xb45309,
+    metalness: 0.58,
+    roughness: 0.35,
+  });
+  const darkMetalMat = new THREE.MeshStandardMaterial({
+    color: 0x334155,
+    metalness: 0.86,
+    roughness: 0.28,
+  });
+  const darkVoidMat = new THREE.MeshBasicMaterial({ color: 0x050507 });
+  const cyanPinMat = new THREE.MeshBasicMaterial({ color: 0x67e8f9 });
+
+  // Koyu kapüşonlu baş kubbesi + beyaz alın plakası
+  const skullHood = new THREE.Mesh(
+    new THREE.SphereGeometry(0.61, 20, 18),
+    hoodClothMat
+  );
+  skullHood.scale.set(0.95, 1.14, 0.98);
+  skullHood.castShadow = true;
+  head.add(skullHood);
+
+  const upperFaceShield = new THREE.Mesh(
+    new THREE.SphereGeometry(0.56, 18, 16),
+    whiteMaskMat
+  );
+  upperFaceShield.scale.set(0.92, 0.96, 0.88);
+  upperFaceShield.position.set(0, 0.06, 0.12);
+  head.add(upperFaceShield);
+
+  // Karanlık göz çukurları ve soğuk endüstriyel göz parıltısı
+  [-0.22, 0.22].forEach((ex) => {
+    const socket = new THREE.Mesh(
+      new THREE.SphereGeometry(0.14, 14, 12),
+      darkVoidMat
+    );
+    socket.scale.set(1.22, 0.82, 0.65);
+    socket.position.set(ex, 0.16, 0.46);
+    head.add(socket);
+
+    const pupil = new THREE.Mesh(
+      new THREE.SphereGeometry(0.026, 8, 8),
+      cyanPinMat
+    );
+    pupil.position.set(ex, 0.16, 0.53);
+    head.add(pupil);
+  });
+
+  // Yarım yüz beyaz endüstriyel solunum maskesi (burun-çene üçgen gövdesi)
+  const respiratorBody = new THREE.Mesh(
+    new THREE.ConeGeometry(0.38, 0.54, 6),
+    whiteMaskMat
+  );
+  respiratorBody.rotation.x = Math.PI / 2 + 0.18;
+  respiratorBody.position.set(0, -0.22, 0.44);
+  respiratorBody.castShadow = true;
+  head.add(respiratorBody);
+
+  // Ön nefes valfi kapağı
+  const frontValve = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.13, 0.15, 0.12, 12),
+    darkMetalMat
+  );
+  frontValve.rotation.x = Math.PI / 2;
+  frontValve.position.set(0, -0.22, 0.68);
+  head.add(frontValve);
+
+  // Yanlara açılı çift filtre kartuşu (Dual Angled Filter Cartridges)
+  [-1, 1].forEach((side) => {
+    const cartGroup = new THREE.Group();
+    cartGroup.position.set(side * 0.34, -0.26, 0.46);
+    cartGroup.rotation.y = side * 0.65;
+    cartGroup.rotation.z = side * -0.28;
+
+    const mountRing = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.14, 0.08, 14),
+      darkMetalMat
+    );
+    mountRing.rotation.x = Math.PI / 2;
+    cartGroup.add(mountRing);
+
+    const cartridge = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.19, 0.17, 0.22, 16),
+      filterCartridgeMat
+    );
+    cartridge.rotation.x = Math.PI / 2;
+    cartridge.position.z = 0.13;
+    cartridge.castShadow = true;
+    cartGroup.add(cartridge);
+
+    const grillCap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.185, 0.185, 0.03, 16),
+      darkMetalMat
+    );
+    grillCap.rotation.x = Math.PI / 2;
+    grillCap.position.z = 0.245;
+    cartGroup.add(grillCap);
+
+    head.add(cartGroup);
+  });
+
+  return head;
+}
+
+export function buildRivetedWelderBallisticHead(): THREE.Group {
+  const head = new THREE.Group();
+  const steelTex = createBrushedSteelTexture();
+
+  const heavySteelMat = new THREE.MeshStandardMaterial({
+    map: steelTex,
+    bumpMap: steelTex,
+    bumpScale: 0.018,
+    color: 0x3f4756,
+    metalness: 0.88,
+    roughness: 0.34,
+  });
+  const rivetMat = new THREE.MeshStandardMaterial({
+    color: 0x94a3b8,
+    metalness: 0.94,
+    roughness: 0.2,
+  });
+  const darkSlitMat = new THREE.MeshBasicMaterial({ color: 0x030304 });
+  const emberEyeMat = new THREE.MeshBasicMaterial({ color: 0xf97316 });
+
+  // Ağır silindirik-kubbeli balistik kaynakçı miğferi
+  const mainShell = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.54, 0.58, 0.88, 16),
+    heavySteelMat
+  );
+  mainShell.scale.set(0.96, 1, 0.92);
+  mainShell.position.set(0, -0.06, 0.06);
+  mainShell.castShadow = true;
+  head.add(mainShell);
+
+  const topDome = new THREE.Mesh(
+    new THREE.SphereGeometry(0.54, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    heavySteelMat
+  );
+  topDome.scale.set(0.96, 0.72, 0.92);
+  topDome.position.set(0, 0.36, 0.06);
+  head.add(topDome);
+
+  // Ön zırhlı yüz plakası
+  const facePlate = new THREE.Mesh(
+    new THREE.BoxGeometry(0.76, 0.84, 0.18),
+    heavySteelMat
+  );
+  facePlate.position.set(0, -0.05, 0.46);
+  facePlate.castShadow = true;
+  head.add(facePlate);
+
+  // Yatay dar vizör yarığı çerçevesi (Visor Slit)
+  const visorFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(0.68, 0.22, 0.12),
+    rivetMat
+  );
+  visorFrame.position.set(0, 0.14, 0.54);
+  head.add(visorFrame);
+
+  const visorSlit = new THREE.Mesh(
+    new THREE.BoxGeometry(0.58, 0.085, 0.14),
+    darkSlitMat
+  );
+  visorSlit.position.set(0, 0.14, 0.55);
+  head.add(visorSlit);
+
+  // Vizör yarığı içinden bakan kızıl-kehribar göz kıvılcımları
+  [-0.18, 0.18].forEach((ex) => {
+    const eyeEmber = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.032, 0.02),
+      emberEyeMat
+    );
+    eyeEmber.position.set(ex, 0.14, 0.615);
+    head.add(eyeEmber);
+  });
+
+  // Alt ağız solunum ızgara yarıkları
+  for (let i = -2; i <= 2; i++) {
+    const vent = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, 0.22, 0.06),
+      darkSlitMat
+    );
+    vent.position.set(i * 0.095, -0.24, 0.535);
+    head.add(vent);
+  }
+
+  // Çelik perçin dizilimi (Rivets)
+  const rivetGeo = new THREE.SphereGeometry(0.028, 8, 8);
+  [
+    [-0.32, 0.32],
+    [0, 0.34],
+    [0.32, 0.32],
+    [-0.32, -0.04],
+    [0.32, -0.04],
+    [-0.32, -0.38],
+    [0, -0.4],
+    [0.32, -0.38],
+  ].forEach(([rx, ry]) => {
+    const rv = new THREE.Mesh(rivetGeo, rivetMat);
+    rv.position.set(rx, ry, 0.55);
+    head.add(rv);
+  });
+
+  return head;
+}
+
+export function buildDetailedHand(
   side: -1 | 1,
-  style: "tactical_leather" | "bandaged_dealer"
+  style:
+    | "tactical_leather"
+    | "bandaged_dealer"
+    | "industrial_work"
+    | "armored_welder"
 ): THREE.Group {
   const hGroup = new THREE.Group();
   const bandageTex = style === "bandaged_dealer" ? createBandageTexture() : null;
 
+  const colorMap: Record<typeof style, number> = {
+    tactical_leather: 0x18181b,
+    bandaged_dealer: 0xd6cfc2,
+    industrial_work: 0x78552b,
+    armored_welder: 0x334155,
+  };
+  const accentMap: Record<typeof style, number> = {
+    tactical_leather: 0x27272a,
+    bandaged_dealer: 0x78716c,
+    industrial_work: 0x451a03,
+    armored_welder: 0x64748b,
+  };
+
   const mainMat = new THREE.MeshStandardMaterial({
     map: bandageTex,
-    color: style === "tactical_leather" ? 0x18181b : 0xd6cfc2,
-    roughness: style === "tactical_leather" ? 0.55 : 0.82,
-    metalness: style === "tactical_leather" ? 0.25 : 0.05,
+    color: colorMap[style],
+    roughness: style === "armored_welder" ? 0.38 : 0.68,
+    metalness: style === "armored_welder" ? 0.72 : 0.15,
   });
 
   const accentMat = new THREE.MeshStandardMaterial({
-    color: style === "tactical_leather" ? 0x27272a : 0x78716c,
-    roughness: 0.6,
-    metalness: 0.3,
+    color: accentMap[style],
+    roughness: 0.52,
+    metalness: style === "armored_welder" ? 0.85 : 0.3,
   });
 
   const palm = new THREE.Mesh(

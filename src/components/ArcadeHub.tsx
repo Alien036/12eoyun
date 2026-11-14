@@ -70,11 +70,11 @@ const ARCADE_GAMES: GameCardConfig[] = [
     key: "buckshot",
     title: "3D Buckshot Roulette",
     icon: "🔫",
-    badge: "Three.js 3D • PS1 Dither • Split-Screen",
+    badge: "Three.js 3D • 1-4 Kişilik Sekizgen Masa",
     category: "psychological",
-    playerCountTag: "Krupiye AI & %50/%50 Çift Kamera",
+    playerCountTag: "Krupiye AI • 2P Düello • 3-4P Masa",
     description:
-      "Tam 3D yeraltı odası, karşıda sırıtan maske & eldivenli eller, 50/50 bölünmüş çift kamera (Dual-POV) ve masada 9 gerçek 3D eşya!",
+      "Tam 3D yeraltı odası, 1-2 kişilik düello veya 3-4 kişilik sekizgen masa, döner tüfek halkası, 4 ikonik maske ve 3D demir eşya sandığı!",
     gradient: "from-red-600/35 via-amber-900/25 to-stone-950/95",
     borderGlow: "hover:border-red-400/75",
   },
@@ -639,9 +639,10 @@ export default function ArcadeHub() {
           {/* YENİ 3 YÜKSEK GERİLİMLİ PSİKOLOJİK DÜELLO OYUNU */}
           {activeSession.game === "buckshot" && (
             <BuckshotView
-              mode={activeSession.mode === "duel" ? "duel" : "solo"}
+              mode={activeSession.mode}
               player1={syncedP1}
               player2={syncedP2}
+              seats={syncedSeats}
               initialSubMode={activeSession.subMode}
               allPlayers={players}
               onBackToHub={handleExitGameToHub}
