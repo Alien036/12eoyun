@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { BuckshotItemKey, ShellType } from "./BuckshotView";
 import {
   ITEM_3D_LABELS,
+  RetroBayerPostProcessor,
   buildDetailedHand,
   buildIndustrialRespiratorHead,
   buildPorcelainNightmareHead,
@@ -56,6 +57,7 @@ export interface OctagonRaycastHitResult {
   targetSeat?: OctagonSeat;
   trayOwner?: OctagonSeat;
   slotIndex?: number;
+  itemKey?: BuckshotItemKey;
 }
 
 export interface OctagonCrateDealEntry {
@@ -180,14 +182,20 @@ function createOctagonFeltTextures(): {
   ctx.closePath();
   ctx.stroke();
 
-  // Merkez taret halkası şablon çizgileri
+  // Merkez beyaz tebeşir çember ve taret halkası şablon çizgileri
+  ctx.strokeStyle = "rgba(236, 240, 232, 0.85)";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(0, 0, 152, 0, Math.PI * 2);
+  ctx.stroke();
+
   ctx.strokeStyle = "rgba(245, 158, 11, 0.62)";
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.arc(0, 0, 138, 0, Math.PI * 2);
   ctx.stroke();
 
-  // 4 İstasyon için Beyaz Eşya Izgaraları ve "DO NOT CROSS" şablon baskıları
+  // 4 İstasyon için Beyaz Eşya Izgaraları, Gömülü Siyah Sandık Kapağı (Recessed Black Hatch) ve "DO NOT CROSS" şablon baskıları
   for (let s = 0; s < 4; s++) {
     ctx.save();
     ctx.rotate((s * Math.PI) / 2);
@@ -204,6 +212,13 @@ function createOctagonFeltTextures(): {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("⚠ DO NOT CROSS ⚠", 0, 180);
+
+    // Her oyuncunun tam ön ortasında gömülü siyah dikdörtgen sandık kapağı (Recessed Black Hatch)
+    ctx.fillStyle = "#040507";
+    ctx.fillRect(-38, 226, 76, 114);
+    ctx.strokeStyle = "rgba(232, 238, 226, 0.72)";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(-38, 226, 76, 114);
 
     // Sol 4 ve Sağ 4 beyaz eşya yuvası
     ctx.strokeStyle = "rgba(232, 238, 226, 0.78)";
@@ -234,6 +249,7 @@ function createOctagonFeltTextures(): {
 export class BuckshotOctagon3DEngine {
   private canvas: HTMLCanvasElement;
   private renderer: THREE.WebGLRenderer | null = null;
+  private postProcessor!: RetroBayerPostProcessor;
   public initError: string | null = null;
   private scene: THREE.Scene;
 
@@ -265,6 +281,7 @@ export class BuckshotOctagon3DEngine {
   private pumpOffsetZ = 0;
   private muzzleLight!: THREE.PointLight;
   private muzzleFlashTimer = 0;
+  private flashFramesRemaining = 0;
 
   // 4 İstasyon Avatarları, Demir Eşya Sandıkları, Eşya Yuvaları ve Göğüs Hedef Halkaları
   private avatars: Record<OctagonSeat, OctagonAvatarRig> = {} as Record<
@@ -326,6 +343,13 @@ export class BuckshotOctagon3DEngine {
 
   private ejectedShells: EjectedOctagonShell[] = [];
   private sparks: SparkParticle[] = [];
+  private smokeClouds: {
+    mesh: THREE.Mesh;
+    vel: THREE.Vector3;
+    life: number;
+    maxLife: number;
+    baseScale: number;
+  }[] = [];
   private camShake: Record<OctagonSeat, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
   private avatarHitRecoil: Record<OctagonSeat, number> = {
     1: 0,
@@ -399,7 +423,7 @@ export class BuckshotOctagon3DEngine {
     this.raycaster = new THREE.Raycaster();
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x050304, 0.082);
+    this.scene.fog = new THREE.FogExp2(0x020203, 0.095);
 
     // 4 Oyuncu Kamerası (THREE.Layers ile kendi kafasını gizler, diğer 3 rakibin kafasını ve kendi göğüs hedef halkasını gösterir!)
     // Layer 0: Ortak sahne, masa, tüfek, eller, gövdeler
@@ -457,6 +481,8 @@ export class BuckshotOctagon3DEngine {
       this.scene.add(this.selfTargets[seat]);
     });
 
+    this.postProcessor = new RetroBayerPostProcessor(640, 360);
+
     try {
       const gl = (this.canvas.getContext("webgl2", { antialias: false }) ||
         this.canvas.getContext("webgl", { antialias: false })) as
@@ -474,17 +500,12 @@ export class BuckshotOctagon3DEngine {
         antialias: false,
         powerPreference: "default",
       });
-      this.renderer.setPixelRatio(
-        Math.min(
-          typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
-          1.35
-        )
-      );
+      this.renderer.setPixelRatio(1);
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 0.94;
-      this.renderer.setClearColor(0x050304, 1);
+      this.renderer.setClearColor(0x000000, 1);
     } catch (err) {
       this.initError =
         err instanceof Error
@@ -1375,6 +1396,10 @@ export class BuckshotOctagon3DEngine {
       this.shellTrayGroup.visible = false;
       return;
     }
+    // Yeni şarjör geldiğinde önceki şarjörden masada biriken kovanları temizle
+    this.ejectedShells.forEach((es) => this.scene.remove(es.mesh));
+    this.ejectedShells = [];
+
     this.shellTrayGroup.visible = true;
     const count = shells.length;
     shells.forEach((sh, idx) => {
@@ -1480,6 +1505,7 @@ export class BuckshotOctagon3DEngine {
           hitType: "item",
           trayOwner: seat,
           slotIndex: i,
+          itemKey: key,
         };
         wrapper.add(hitBox);
 
@@ -1488,6 +1514,7 @@ export class BuckshotOctagon3DEngine {
             hitType: "item",
             trayOwner: seat,
             slotIndex: i,
+            itemKey: key,
           };
         });
 
@@ -1608,9 +1635,41 @@ export class BuckshotOctagon3DEngine {
     this.pumpOffsetZ = -0.26;
     if (isLive) {
       this.muzzleFlashTimer = 0.16;
-      this.muzzleLight.intensity = 28;
-      this.camShake[targetSeat] = 0.42;
-      this.avatarHitRecoil[targetSeat] = 0.48;
+      this.flashFramesRemaining = 2;
+      this.muzzleLight.intensity = 32;
+      this.camShake[targetSeat] = 0.48;
+      this.avatarHitRecoil[targetSeat] = 0.85;
+
+      // Hacimsel barut dumanı bulutu
+      const smokeGeo = new THREE.DodecahedronGeometry(0.15, 0);
+      for (let i = 0; i < 14; i++) {
+        const mat = new THREE.MeshBasicMaterial({
+          color: i % 3 === 0 ? 0x78716c : 0x57534e,
+          transparent: true,
+          opacity: 0.76,
+          depthWrite: false,
+        });
+        const m = new THREE.Mesh(smokeGeo, mat);
+        m.position.set(
+          (Math.random() - 0.5) * 0.25,
+          1.35 + (Math.random() - 0.5) * 0.16,
+          (Math.random() - 0.5) * 0.25
+        );
+        const baseScale = 0.65 + Math.random() * 0.7;
+        m.scale.setScalar(baseScale);
+        this.scene.add(m);
+        this.smokeClouds.push({
+          mesh: m,
+          vel: new THREE.Vector3(
+            (Math.random() - 0.5) * 0.6,
+            0.7 + Math.random() * 0.8,
+            (Math.random() - 0.5) * 0.6
+          ),
+          life: 0,
+          maxLife: 0.95 + Math.random() * 0.45,
+          baseScale,
+        });
+      }
 
       const hitPos = this.getSeatTransform(targetSeat, 0, 2.2, 3.6);
       for (let i = 0; i < 18; i++) {
@@ -1703,6 +1762,7 @@ export class BuckshotOctagon3DEngine {
             targetSeat: ud.targetSeat,
             trayOwner: ud.trayOwner,
             slotIndex: ud.slotIndex,
+            itemKey: ud.itemKey,
           };
         }
         obj = obj.parent;
@@ -1718,7 +1778,12 @@ export class BuckshotOctagon3DEngine {
     if (!parent) return;
     const w = Math.max(1, parent.clientWidth);
     const h = Math.max(1, parent.clientHeight);
-    this.renderer.setSize(w, h, false);
+    this.renderer.setPixelRatio(1);
+    const aspect = w / h;
+    const rtH = 420;
+    const rtW = Math.max(520, Math.min(980, Math.round(rtH * aspect)));
+    this.postProcessor.setSize(rtW, rtH);
+    this.renderer.setSize(rtW, rtH, false);
   }
 
   private animate = (): void => {
@@ -1766,6 +1831,24 @@ export class BuckshotOctagon3DEngine {
       this.muzzleFlashTimer -= dt;
       if (this.muzzleFlashTimer <= 0) {
         this.muzzleLight.intensity = 0;
+      }
+    }
+
+    for (let i = this.smokeClouds.length - 1; i >= 0; i--) {
+      const sc = this.smokeClouds[i];
+      sc.life += dt;
+      const p = sc.life / sc.maxLife;
+      sc.mesh.position.addScaledVector(sc.vel, dt);
+      sc.mesh.scale.setScalar(sc.baseScale * (1 + p * 2.2));
+      (sc.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(
+        0,
+        0.76 * (1 - p)
+      );
+      if (sc.life >= sc.maxLife) {
+        this.scene.remove(sc.mesh);
+        sc.mesh.geometry.dispose();
+        (sc.mesh.material as THREE.Material).dispose();
+        this.smokeClouds.splice(i, 1);
       }
     }
 
@@ -1928,9 +2011,18 @@ export class BuckshotOctagon3DEngine {
 
   private renderViewports(): void {
     if (!this.renderer) return;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
+    const w = this.postProcessor.renderTarget.width;
+    const h = this.postProcessor.renderTarget.height;
     if (w <= 0 || h <= 0) return;
+
+    if (this.flashFramesRemaining > 0) {
+      this.postProcessor.setFlash(0.85);
+      this.flashFramesRemaining -= 1;
+    } else {
+      this.postProcessor.setFlash(0.0);
+    }
+
+    this.renderer.setRenderTarget(this.postProcessor.renderTarget);
 
     if (this.currentState.viewMode === "active_fullscreen") {
       this.renderer.setScissorTest(false);
@@ -1938,51 +2030,47 @@ export class BuckshotOctagon3DEngine {
       this.activeFullCam.aspect = w / h;
       this.activeFullCam.updateProjectionMatrix();
       this.renderer.render(this.scene, this.activeFullCam);
-      return;
+    } else {
+      // 2x2 Dörtlü Bölünmüş Ekran (Quad Split-Screen)
+      this.renderer.setScissorTest(true);
+      const halfW = Math.floor(w / 2);
+      const halfH = Math.floor(h / 2);
+      const aspect = halfW / Math.max(1, halfH);
+
+      const quadrants: {
+        seat: OctagonSeat;
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+      }[] = [
+        { seat: 1, x: 0, y: halfH, w: halfW, h: h - halfH },
+        { seat: 2, x: halfW, y: halfH, w: w - halfW, h: h - halfH },
+        { seat: 3, x: 0, y: 0, w: halfW, h: halfH },
+        { seat: 4, x: halfW, y: 0, w: w - halfW, h: halfH },
+      ];
+
+      quadrants.forEach((q) => {
+        this.renderer!.setViewport(q.x, q.y, q.w, q.h);
+        this.renderer!.setScissor(q.x, q.y, q.w, q.h);
+
+        if (this.currentState.playerCount === 3 && q.seat === 4) {
+          this.cctvCam.aspect = aspect;
+          this.cctvCam.updateProjectionMatrix();
+          this.renderer!.render(this.scene, this.cctvCam);
+        } else {
+          const cam = this.playerCams[q.seat];
+          cam.aspect = aspect;
+          cam.updateProjectionMatrix();
+          this.renderer!.render(this.scene, cam);
+        }
+      });
     }
 
-    // 2x2 Dörtlü Bölünmüş Ekran (Quad Split-Screen)
-    this.renderer.setScissorTest(true);
-    const halfW = Math.floor(w / 2);
-    const halfH = Math.floor(h / 2);
-    const aspect = halfW / Math.max(1, halfH);
-
-    // WebGL koordinatlarında y=0 alt kenardır:
-    // Sol-Üst (P1): x=0, y=halfH
-    // Sağ-Üst (P2): x=halfW, y=halfH
-    // Sol-Alt (P3): x=0, y=0
-    // Sağ-Alt (P4 veya 3P CCTV): x=halfW, y=0
-    const quadrants: {
-      seat: OctagonSeat;
-      x: number;
-      y: number;
-      w: number;
-      h: number;
-    }[] = [
-      { seat: 1, x: 0, y: halfH, w: halfW, h: h - halfH },
-      { seat: 2, x: halfW, y: halfH, w: w - halfW, h: h - halfH },
-      { seat: 3, x: 0, y: 0, w: halfW, h: halfH },
-      { seat: 4, x: halfW, y: 0, w: w - halfW, h: halfH },
-    ];
-
-    quadrants.forEach((q) => {
-      this.renderer!.setViewport(q.x, q.y, q.w, q.h);
-      this.renderer!.setScissor(q.x, q.y, q.w, q.h);
-
-      if (this.currentState.playerCount === 3 && q.seat === 4) {
-        // 3 Kişilik Modda Sağ-Alt 4. Kare: Canlı CCTV Tepe Kamerası
-        this.cctvCam.aspect = aspect;
-        this.cctvCam.updateProjectionMatrix();
-        this.renderer!.render(this.scene, this.cctvCam);
-      } else {
-        const cam = this.playerCams[q.seat];
-        cam.aspect = aspect;
-        cam.updateProjectionMatrix();
-        this.renderer!.render(this.scene, cam);
-      }
-    });
-
     this.renderer.setScissorTest(false);
+    this.renderer.setRenderTarget(null);
+    this.renderer.setViewport(0, 0, this.canvas.width, this.canvas.height);
+    this.postProcessor.renderToScreen(this.renderer);
   }
 
   public dispose(): void {
@@ -1992,6 +2080,8 @@ export class BuckshotOctagon3DEngine {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
     }
+
+    this.postProcessor?.dispose();
 
     this.scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;

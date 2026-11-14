@@ -147,6 +147,9 @@ export default function BuckshotMultiplayerView({
   const [bannerText, setBannerText] = useState<string>(
     "SEKİZGEN YERALTI MASASI HAZIRLANIYOR..."
   );
+  const [hoveredItemKey, setHoveredItemKey] = useState<BuckshotItemKey | null>(
+    null
+  );
   const [busy, setBusy] = useState<boolean>(true);
   const [matchFinished, setMatchFinished] = useState<boolean>(false);
   const [finalStandings, setFinalStandings] = useState<
@@ -1113,6 +1116,19 @@ export default function BuckshotMultiplayerView({
     }
   };
 
+  const handleCanvasPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!engineRef.current) return;
+    const hit = engineRef.current.getInteractiveHitAtPointer(
+      e.clientX,
+      e.clientY
+    );
+    if (hit.hitType === "item" && hit.itemKey) {
+      setHoveredItemKey(hit.itemKey);
+    } else {
+      setHoveredItemKey(null);
+    }
+  };
+
   // Aktif oyuncunun benzersiz eşyaları (Kompakt Eşya Rehberi için)
   const activePlayerObj = players.find((p) => p.seat === turnSeat);
   const activeUniqueItems = Array.from(
@@ -1133,8 +1149,29 @@ export default function BuckshotMultiplayerView({
       <div
         ref={containerRef}
         onPointerDown={handleCanvasPointerDown}
+        onPointerMove={handleCanvasPointerMove}
+        onPointerLeave={() => setHoveredItemKey(null)}
         className="w-full h-full relative cursor-crosshair"
       />
+
+      {/* Orijinal Siyah Alt Yazı Barı (3D Eşya Odaklandığında) */}
+      <AnimatePresence>
+        {hoveredItemKey && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            className="pointer-events-none absolute bottom-16 left-1/2 -translate-x-1/2 z-40 rounded border border-stone-500/60 bg-black/92 px-4 py-1.5 text-center font-mono shadow-[0_0_24px_rgba(0,0,0,0.95)]"
+          >
+            <div className="text-xs font-black tracking-widest text-white uppercase">
+              {BUCKSHOT_ITEMS[hoveredItemKey].name}
+            </div>
+            <div className="mt-0.5 text-[10px] text-stone-300">
+              {BUCKSHOT_ITEMS[hoveredItemKey].desc}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* WebGL Hatası Koruması */}
       {webglError && (

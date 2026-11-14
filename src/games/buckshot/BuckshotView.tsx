@@ -297,6 +297,23 @@ function BuckshotSoloDuelView({
   );
   const [adrenalineSecondsLeft, setAdrenalineSecondsLeft] = useState<number>(0);
 
+  // Orijinal Siyah Altyazı Şeridi (Black Subtitle Bar) ve 3D Eşya Odaklanma Durumu
+  const [roundWinnerText, setRoundWinnerText] = useState<string | null>(null);
+  const [hoveredItemP1, setHoveredItemP1] = useState<BuckshotItemKey | null>(
+    null
+  );
+  const [hoveredItemP2, setHoveredItemP2] = useState<BuckshotItemKey | null>(
+    null
+  );
+  const [activeSubtitleP1, setActiveSubtitleP1] = useState<{
+    title: string;
+    desc: string;
+  } | null>(null);
+  const [activeSubtitleP2, setActiveSubtitleP2] = useState<{
+    title: string;
+    desc: string;
+  } | null>(null);
+
   // Akıllı Tahta "Avuç İçi Gizli Bakış" (Sadece aktif oyuncunun kendi yarı ekranında açılır!)
   const [secretPeek, setSecretPeek] = useState<SecretPeekData | null>(null);
   const [isHoldingPeek, setIsHoldingPeek] = useState<boolean>(false);
@@ -405,6 +422,10 @@ function BuckshotSoloDuelView({
       maxHp,
       p1Hp,
       p2Hp,
+      p1Name: player1.name,
+      p2Name,
+      currentRound,
+      roundWinnerText,
       wiresCutSuddenDeath,
       isSawedOff,
       p1Items,
@@ -423,6 +444,10 @@ function BuckshotSoloDuelView({
     maxHp,
     p1Hp,
     p2Hp,
+    player1.name,
+    p2Name,
+    currentRound,
+    roundWinnerText,
     wiresCutSuddenDeath,
     isSawedOff,
     p1Items,
@@ -611,6 +636,7 @@ function BuckshotSoloDuelView({
         sMode === "fast1" ? 5 : roundNum === 1 ? 2 : roundNum === 2 ? 4 : 5;
       const emptySlots = Array(8).fill(null);
       setCurrentRound(roundNum);
+      setRoundWinnerText(null);
       setMaxHp(roundHp);
       setP1Hp(roundHp);
       setP2Hp(roundHp);
@@ -647,6 +673,7 @@ function BuckshotSoloDuelView({
     sound.playClick();
     savedToFirestoreRef.current = false;
     setMatchOver(null);
+    setRoundWinnerText(null);
     setP1RoundsWon(0);
     setP2RoundsWon(0);
     setP1BraveStats({ selfBlankCount: 0, sawedHits: 0, itemsUsed: 0 });
@@ -725,6 +752,7 @@ function BuckshotSoloDuelView({
 
       let isNewBest = false;
       const winnerName = winnerSeat === 1 ? player1.name : p2Name;
+      setRoundWinnerText(`${winnerName.toUpperCase()} KAZANDI!`);
       const sawedCount =
         winnerSeat === 1 ? p1BraveStats.sawedHits : p2BraveStats.sawedHits;
 
@@ -802,6 +830,7 @@ function BuckshotSoloDuelView({
       setP2RoundsWon(nextP2Wins);
 
       const winnerLabel = roundWinner === 1 ? player1.name : p2Name;
+      setRoundWinnerText(`${winnerLabel.toUpperCase()} KAZANDI!`);
 
       if (
         seriesMode === "fast1" ||
@@ -1118,6 +1147,18 @@ function BuckshotSoloDuelView({
     ) => {
       engineRef.current?.triggerItemUse3DAnimation(userSeat, itemKey, slotIdx);
 
+      const meta = BUCKSHOT_ITEMS[itemKey];
+      const setSubtitle = userSeat === 1 ? setActiveSubtitleP1 : setActiveSubtitleP2;
+      setSubtitle({
+        title: meta.name.toUpperCase(),
+        desc: meta.desc,
+      });
+      setTimeout(() => {
+        setSubtitle((prev) =>
+          prev?.title === meta.name.toUpperCase() ? null : prev
+        );
+      }, 2800);
+
       if (userSeat === 1) {
         setP1BraveStats((s) => ({ ...s, itemsUsed: s.itemsUsed + 1 }));
       } else {
@@ -1288,6 +1329,14 @@ function BuckshotSoloDuelView({
               setCrtBanner("📱 KRUPIYE 3D GİZLİ TELEFONU DİNLEDİ...");
               setCrtSubText("Gelecekteki bir fişeğin sırasını öğrendi.");
             } else {
+              if (mode === "solo") {
+                setActiveSubtitleP1({
+                  title: `${ordinal}. FİŞEK ... ${
+                    futureShell === "live" ? "KIRMIZI (DOLU)" : "MAVİ (BOŞ)"
+                  }`,
+                  desc: msg,
+                });
+              }
               setSecretPeek({
                 ownerSeat: userSeat,
                 title: "📱 GİZLİ TELEFON FISILTISI",
@@ -1578,6 +1627,26 @@ function BuckshotSoloDuelView({
     ]
   );
 
+  // 3D MASADAKİ EŞYALARIN ÜZERİNE GELİNDİĞİNDE (HOVER) ORİJİNAL SİYAH ALT YAZI BARINI VE YAN REHBERİ VURGULA
+  const handleCanvasPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const hit = engineRef.current?.raycastFromPointer(e.clientX, e.clientY);
+      if (!hit || hit.hitType !== "item" || !hit.itemKey) {
+        setHoveredItemP1(null);
+        setHoveredItemP2(null);
+        return;
+      }
+      if (hit.viewportSeat === 1) {
+        setHoveredItemP1(hit.itemKey);
+        setHoveredItemP2(null);
+      } else {
+        setHoveredItemP2(hit.itemKey);
+        setHoveredItemP1(null);
+      }
+    },
+    []
+  );
+
   // AKILLI 3D KRUPIYE (DEALER) YAPAY ZEKA MOTORU
   useEffect(() => {
     if (
@@ -1741,6 +1810,7 @@ function BuckshotSoloDuelView({
     const rawList = ownerSeat === 1 ? p1Items : p2Items;
     const recentFlashKey =
       ownerSeat === 1 ? recentLandedKeyP1 : recentLandedKeyP2;
+    const hoveredKey = ownerSeat === 1 ? hoveredItemP1 : hoveredItemP2;
 
     // Aynı eşyadan masada birden fazla varsa grupla ve yanına x2, x3 rozeti koy
     const groupedMap = new Map<BuckshotItemKey, number>();
@@ -1788,7 +1858,8 @@ function BuckshotSoloDuelView({
             <AnimatePresence initial={false}>
               {groupedEntries.map(([itemKey, count]) => {
                 const meta = BUCKSHOT_ITEMS[itemKey];
-                const isFreshlyLanded = recentFlashKey === itemKey;
+                const isFreshlyLanded =
+                  recentFlashKey === itemKey || hoveredKey === itemKey;
                 return (
                   <motion.div
                     key={itemKey}
@@ -1865,6 +1936,14 @@ function BuckshotSoloDuelView({
     const isMyTurn = turn === seat;
     const isStealingFromOpp = adrenalineStealSeat === seat;
     const isHoldingGun = gunPickedUpBy === seat && isMyTurn;
+    const hoveredKey = isP1 ? hoveredItemP1 : hoveredItemP2;
+    const activeSub = isP1 ? activeSubtitleP1 : activeSubtitleP2;
+    const subtitleDisplay = hoveredKey
+      ? {
+          title: BUCKSHOT_ITEMS[hoveredKey].name.toUpperCase(),
+          desc: BUCKSHOT_ITEMS[hoveredKey].desc,
+        }
+      : activeSub;
 
     return (
       <div
@@ -1903,16 +1982,22 @@ function BuckshotSoloDuelView({
           renderSideInventoryGuide(2, "right", "📦 2. OYUNCU EŞYALARI", false)
         )}
 
-        {/* Vurulan Oyuncunun Yarı Ekranında Kan Kırmızısı Elektroşok Kararması */}
+        {/* Vurulan Oyuncunun Yarı Ekranında Stilize Pikselli Kırmızı/Pembe Sıçrama Damlaları & Elektroşok Kararması */}
         <AnimatePresence>
           {hitScreenEffect === seat && (
             <motion.div
-              initial={{ opacity: 0.92 }}
+              initial={{ opacity: 0.96 }}
               animate={{ opacity: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.85 }}
+              transition={{ duration: 0.95 }}
               className="absolute inset-0 z-30 bg-gradient-to-b from-red-700/80 via-black/70 to-red-950/90"
-            />
+            >
+              {/* Stilize Pikselli Kırmızı/Pembe Sıçrama Damlaları */}
+              <div className="absolute top-6 left-8 h-6 w-6 bg-red-500 shadow-[8px_8px_0_#f43f5e,-8px_14px_0_#991b1b,18px_-4px_0_#fb7185]" />
+              <div className="absolute top-12 right-10 h-7 w-7 bg-rose-600 shadow-[-10px_10px_0_#ef4444,12px_16px_0_#881337,-16px_-6px_0_#fda4af]" />
+              <div className="absolute bottom-14 left-12 h-6 w-8 bg-red-600 shadow-[12px_-8px_0_#f43f5e,-10px_-14px_0_#7f1d1d]" />
+              <div className="absolute bottom-10 right-14 h-7 w-6 bg-rose-500 shadow-[-12px_-10px_0_#dc2626,10px_-16px_0_#fb7185]" />
+            </motion.div>
           )}
         </AnimatePresence>
 
@@ -2080,6 +2165,25 @@ function BuckshotSoloDuelView({
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* ORİJİNAL SİYAH ALT YAZI BARI (Retro Beyaz Piksel Fontlu Eşya Odak & Telefon Alt Yazısı) */}
+          <AnimatePresence>
+            {subtitleDisplay && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 6 }}
+                className="pointer-events-none mb-1 max-w-[92%] rounded border border-stone-500/60 bg-black/92 px-4 py-1.5 text-center font-mono shadow-[0_0_24px_rgba(0,0,0,0.95)]"
+              >
+                <div className="text-[11px] sm:text-xs font-black tracking-widest text-white uppercase">
+                  {subtitleDisplay.title}
+                </div>
+                <div className="mt-0.5 text-[10px] text-stone-300">
+                  {subtitleDisplay.desc}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     );
@@ -2172,6 +2276,11 @@ function BuckshotSoloDuelView({
         <div
           ref={containerRef}
           onPointerDown={handleCanvasPointerDown}
+          onPointerMove={handleCanvasPointerMove}
+          onPointerLeave={() => {
+            setHoveredItemP1(null);
+            setHoveredItemP2(null);
+          }}
           className="w-full h-full relative cursor-crosshair"
         />
 
