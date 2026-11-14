@@ -56,132 +56,6 @@ interface DefibPaddlesRig {
   shockPlayed: boolean;
 }
 
-// ============================================================================
-// 1080p NATIVE FULL HD + MSAA + 1px MİKRO-DITHER POST-PROCESSING HATTI
-// (Sıfır Piksel Küçültme / Sıfır Bulanıklaştırma — Jilet Keskinliğinde 1080p!)
-// ============================================================================
-export class RetroBayerPostProcessor {
-  public renderTarget: THREE.WebGLRenderTarget;
-  private postScene: THREE.Scene;
-  private postCam: THREE.OrthographicCamera;
-  private quadMesh: THREE.Mesh;
-  private shaderMat: THREE.ShaderMaterial;
-
-  constructor(width: number = 1920, height: number = 1080) {
-    this.renderTarget = new THREE.WebGLRenderTarget(width, height, {
-      minFilter: THREE.LinearFilter,
-      magFilter: THREE.LinearFilter,
-      format: THREE.RGBAFormat,
-      generateMipmaps: false,
-      depthBuffer: true,
-      stencilBuffer: false,
-      samples: 4, // WebGL2 4x MSAA Jilet Keskinliğinde Kenarlar
-    });
-
-    this.postScene = new THREE.Scene();
-    this.postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-
-    this.shaderMat = new THREE.ShaderMaterial({
-      uniforms: {
-        tDiffuse: { value: this.renderTarget.texture },
-        uResolution: { value: new THREE.Vector2(width, height) },
-        uFlash: { value: 0.0 },
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = vec4(position.xy, 0.0, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform vec2 uResolution;
-        uniform float uFlash;
-        varying vec2 vUv;
-
-        // 1 Piksellik İnce Mikro-Dither Matrisi (Bulanıklaştırmaz, banding'i önler)
-        float bayer4x4(vec2 pos) {
-          int x = int(mod(pos.x, 4.0));
-          int y = int(mod(pos.y, 4.0));
-          int idx = x + y * 4;
-          if (idx == 0) return 0.0 / 16.0 - 0.5;
-          if (idx == 1) return 8.0 / 16.0 - 0.5;
-          if (idx == 2) return 2.0 / 16.0 - 0.5;
-          if (idx == 3) return 10.0 / 16.0 - 0.5;
-          if (idx == 4) return 12.0 / 16.0 - 0.5;
-          if (idx == 5) return 4.0 / 16.0 - 0.5;
-          if (idx == 6) return 14.0 / 16.0 - 0.5;
-          if (idx == 7) return 6.0 / 16.0 - 0.5;
-          if (idx == 8) return 3.0 / 16.0 - 0.5;
-          if (idx == 9) return 11.0 / 16.0 - 0.5;
-          if (idx == 10) return 1.0 / 16.0 - 0.5;
-          if (idx == 11) return 9.0 / 16.0 - 0.5;
-          if (idx == 12) return 15.0 / 16.0 - 0.5;
-          if (idx == 13) return 7.0 / 16.0 - 0.5;
-          if (idx == 14) return 13.0 / 16.0 - 0.5;
-          return 5.0 / 16.0 - 0.5;
-        }
-
-        void main() {
-          vec4 texel = texture2D(tDiffuse, vUv);
-          vec3 color = texel.rgb;
-
-          // Keskin 1080p kontrast ve sıcak-endüstriyel (Gritty Industrial) renk tonlaması
-          color = (color - 0.5) * 1.12 + 0.5;
-          color *= vec3(1.04, 0.99, 0.93);
-
-          // 2 karelik kör edici namlu/elektroşok beyaz-sarı flaşı
-          if (uFlash > 0.0) {
-            color = mix(color, vec3(1.0, 0.97, 0.86), clamp(uFlash, 0.0, 1.0));
-          }
-
-          // Tam 1080p piksel koordinatında 1px mikro-dither / ince film greni (Çamurlaşma sıfır!)
-          float microDither = bayer4x4(gl_FragCoord.xy) * (1.0 / 92.0);
-          color = clamp(color + vec3(microDither), 0.0, 1.0);
-
-          // Temiz sinematik kenar karartması (Vignette)
-          vec2 centered = vUv - 0.5;
-          float distSq = dot(centered, centered);
-          float vig = smoothstep(0.74, 0.16, distSq);
-          color *= mix(0.28, 1.0, vig);
-
-          gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
-        }
-      `,
-      depthTest: false,
-      depthWrite: false,
-    });
-
-    this.quadMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(2, 2),
-      this.shaderMat
-    );
-    this.postScene.add(this.quadMesh);
-  }
-
-  public setSize(width: number, height: number): void {
-    const rtW = Math.max(1, Math.floor(width));
-    const rtH = Math.max(1, Math.floor(height));
-    this.renderTarget.setSize(rtW, rtH);
-    this.shaderMat.uniforms.uResolution.value.set(rtW, rtH);
-  }
-
-  public setFlash(intensity: number): void {
-    this.shaderMat.uniforms.uFlash.value = intensity;
-  }
-
-  public renderToScreen(renderer: THREE.WebGLRenderer): void {
-    renderer.render(this.postScene, this.postCam);
-  }
-
-  public dispose(): void {
-    this.renderTarget.dispose();
-    this.quadMesh.geometry.dispose();
-    this.shaderMat.dispose();
-  }
-}
-
 interface Ejected3DShell {
   mesh: THREE.Group;
   vel: THREE.Vector3;
@@ -2362,9 +2236,9 @@ function createAvatarRig(isP1AtPlusZ: boolean, layerIndex: 1 | 2): AvatarRig {
 // ============================================================================
 
 export class Buckshot3DEngine {
+  private container: HTMLElement;
   private canvas: HTMLCanvasElement;
   private renderer: THREE.WebGLRenderer | null = null;
-  private postProcessor!: RetroBayerPostProcessor;
   public initError: string | null = null;
   private scene: THREE.Scene;
   private camP1: THREE.PerspectiveCamera;
@@ -2496,10 +2370,9 @@ export class Buckshot3DEngine {
   private lastItemsHashP2: string = "";
   private lastRevealHash: string = "";
   private lastTurnAndStealHash: string = "";
-  private cssWidth: number = 1280;
-  private cssHeight: number = 720;
 
   constructor(container: HTMLElement) {
+    this.container = container;
     this.canvas = document.createElement("canvas");
     this.canvas.className = "w-full h-full block";
     container.appendChild(this.canvas);
@@ -2561,8 +2434,6 @@ export class Buckshot3DEngine {
     this.defibP2 = this.buildDefibPaddlesRig(2);
     this.scene.add(this.defibP1.root);
     this.scene.add(this.defibP2.root);
-
-    this.postProcessor = new RetroBayerPostProcessor(1920, 1080);
 
     // Güvenli WebGL Başlatma + 1080p Keskin Kenarlar (MSAA) + PCFSoftShadowMap + ACESFilmicToneMapping
     try {
@@ -5013,20 +4884,13 @@ export class Buckshot3DEngine {
 
   public resize(): void {
     if (this.disposed || !this.renderer) return;
-    const parent = this.canvas.parentElement;
-    const w = parent ? parent.clientWidth : window.innerWidth;
-    const h = parent ? parent.clientHeight : window.innerHeight;
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
     if (w <= 0 || h <= 0) return;
 
-    this.cssWidth = w;
-    this.cssHeight = h;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
-
-    const rtW = Math.max(1, Math.floor(w * dpr));
-    const rtH = Math.max(1, Math.floor(h * dpr));
-    this.postProcessor.setSize(rtW, rtH);
   }
 
   private animate = (): void => {
@@ -5728,14 +5592,18 @@ export class Buckshot3DEngine {
     const bobY2 = Math.sin(elapsed * 1.8 + 1.5) * 0.032;
     const bobX2 = Math.cos(elapsed * 0.9 + 1.5) * 0.022;
 
+    const isDuel = st.mode === "duel";
+    const baseCamY = isDuel ? 3.64 : 3.48;
+    const baseCamZ = isDuel ? 5.24 : 4.88;
+
     const p1BasePos = isRevealing
       ? new THREE.Vector3(-1.35, 2.38, 1.92)
       : isMonitorCutIn
       ? new THREE.Vector3(0.95, 2.18, 1.65)
       : new THREE.Vector3(
           bobX1,
-          3.48 + bobY1 - p1ActionLean * 0.14 + this.cam1Knockback * 0.55,
-          4.88 - p1ActionLean * 0.36 + this.cam1Knockback * 1.35
+          baseCamY + bobY1 - p1ActionLean * 0.14 + this.cam1Knockback * 0.55,
+          baseCamZ - p1ActionLean * 0.36 + this.cam1Knockback * 1.35
         );
     const p1LookTarget = isRevealing
       ? new THREE.Vector3(-2.32, 1.02, 0)
@@ -5743,7 +5611,7 @@ export class Buckshot3DEngine {
       ? new THREE.Vector3(2.38, 1.44, 0)
       : new THREE.Vector3(
           bobX1 * 0.4,
-          1.42 + p1ActionLean * 0.12 + this.cam1Knockback * 1.4,
+          1.38 + p1ActionLean * 0.12 + this.cam1Knockback * 1.4,
           -0.35
         );
 
@@ -5760,8 +5628,8 @@ export class Buckshot3DEngine {
       ? new THREE.Vector3(0.95, 2.18, -1.65)
       : new THREE.Vector3(
           bobX2,
-          3.48 + bobY2 - p2ActionLean * 0.14 + this.cam2Knockback * 0.55,
-          -4.88 + p2ActionLean * 0.36 - this.cam2Knockback * 1.35
+          baseCamY + bobY2 - p2ActionLean * 0.14 + this.cam2Knockback * 0.55,
+          -baseCamZ + p2ActionLean * 0.36 - this.cam2Knockback * 1.35
         );
     const p2LookTarget = isRevealing
       ? new THREE.Vector3(-2.32, 1.02, 0)
@@ -5769,7 +5637,7 @@ export class Buckshot3DEngine {
       ? new THREE.Vector3(2.38, 1.44, 0)
       : new THREE.Vector3(
           bobX2 * 0.4,
-          1.42 + p2ActionLean * 0.12 + this.cam2Knockback * 1.4,
+          1.38 + p2ActionLean * 0.12 + this.cam2Knockback * 1.4,
           0.35
         );
 
@@ -5783,52 +5651,58 @@ export class Buckshot3DEngine {
 
   private renderDualViewports(): void {
     if (!this.renderer) return;
-    const w = this.postProcessor.renderTarget.width;
-    const h = this.postProcessor.renderTarget.height;
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
     if (w <= 0 || h <= 0) return;
 
     // 2 karelik kör edici beyaz-sarı namlu/elektroşok flaşı
     if (this.flashFramesRemaining > 0) {
-      this.postProcessor.setFlash(0.85);
+      this.renderer.toneMappingExposure = 2.85;
       this.flashFramesRemaining -= 1;
     } else {
-      this.postProcessor.setFlash(0.0);
+      this.renderer.toneMappingExposure = 0.94;
     }
-
-    // 1. Aşama: Sahneyi tam HD (clientWidth * dpr x clientHeight * dpr) MSAA WebGLRenderTarget'a çiz
-    this.renderer.setRenderTarget(this.postProcessor.renderTarget);
 
     if (this.currentState.mode === "solo") {
       this.renderer.setScissorTest(false);
-      this.renderer.setViewport(0, 0, w, h);
+      this.renderer.autoClear = false;
+      this.renderer.clear();
       this.camP1.fov = 66;
       this.camP1.aspect = w / h;
       this.camP1.updateProjectionMatrix();
+      this.renderer.setViewport(0, 0, w, h);
       this.renderer.render(this.scene, this.camP1);
     } else {
-      const halfW = Math.floor(w / 2);
       this.renderer.setScissorTest(true);
+      this.renderer.autoClear = false;
+      this.renderer.clear();
 
+      // SOL YARI EKRAN: 1. Oyuncunun Kendi Kamerası (+Z koltuğundan -Z yönüne bakar, TÜM MASAYI GÖRÜR)
+      const halfW = Math.floor(w / 2);
+      const aspect1 = halfW / h;
+      this.camP1.fov =
+        aspect1 < 1
+          ? Math.min(86, Math.round(74 / Math.max(0.78, aspect1 * 0.96)))
+          : 74;
+      this.camP1.aspect = aspect1;
+      this.camP1.updateProjectionMatrix();
       this.renderer.setViewport(0, 0, halfW, h);
       this.renderer.setScissor(0, 0, halfW, h);
-      this.camP1.fov = 74;
-      this.camP1.aspect = halfW / h;
-      this.camP1.updateProjectionMatrix();
       this.renderer.render(this.scene, this.camP1);
 
-      this.renderer.setViewport(halfW, 0, w - halfW, h);
-      this.renderer.setScissor(halfW, 0, w - halfW, h);
-      this.camP2.fov = 74;
-      this.camP2.aspect = (w - halfW) / h;
+      // SAĞ YARI EKRAN: 2. Oyuncunun Kendi Kamerası (-Z koltuğundan +Z yönüne bakar, TÜM MASAYI GÖRÜR)
+      const rightW = w - halfW;
+      const aspect2 = rightW / h;
+      this.camP2.fov =
+        aspect2 < 1
+          ? Math.min(86, Math.round(74 / Math.max(0.78, aspect2 * 0.96)))
+          : 74;
+      this.camP2.aspect = aspect2;
       this.camP2.updateProjectionMatrix();
+      this.renderer.setViewport(halfW, 0, rightW, h);
+      this.renderer.setScissor(halfW, 0, rightW, h);
       this.renderer.render(this.scene, this.camP2);
     }
-
-    // 2. Aşama: 1px Mikro-Dither + 1080p Kontrast/Vignette Shader Quad ile ekrana bas
-    this.renderer.setScissorTest(false);
-    this.renderer.setRenderTarget(null);
-    this.renderer.setViewport(0, 0, this.cssWidth, this.cssHeight);
-    this.postProcessor.renderToScreen(this.renderer);
   }
 
   public dispose(): void {
@@ -5838,7 +5712,6 @@ export class Buckshot3DEngine {
       this.animFrameId = null;
     }
 
-    this.postProcessor?.dispose();
     this.crtScreenTex?.dispose();
 
     this.scene.traverse((obj) => {

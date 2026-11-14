@@ -2,7 +2,6 @@ import * as THREE from "three";
 import type { BuckshotItemKey, ShellType } from "./BuckshotView";
 import {
   ITEM_3D_LABELS,
-  RetroBayerPostProcessor,
   buildDetailedHand,
   buildIndustrialRespiratorHead,
   buildPorcelainNightmareHead,
@@ -246,9 +245,9 @@ function createOctagonFeltTextures(): {
 }
 
 export class BuckshotOctagon3DEngine {
+  private container: HTMLElement;
   private canvas: HTMLCanvasElement;
   private renderer: THREE.WebGLRenderer | null = null;
-  private postProcessor!: RetroBayerPostProcessor;
   public initError: string | null = null;
   private scene: THREE.Scene;
 
@@ -411,10 +410,9 @@ export class BuckshotOctagon3DEngine {
 
   private lastItemsHash = "";
   private lastRevealHash = "";
-  private cssWidth = 1280;
-  private cssHeight = 720;
 
   constructor(container: HTMLElement) {
+    this.container = container;
     this.canvas = document.createElement("canvas");
     this.canvas.className = "w-full h-full block";
     container.appendChild(this.canvas);
@@ -480,8 +478,6 @@ export class BuckshotOctagon3DEngine {
       this.selfTargets[seat] = this.buildSelfTargetReticle(seat);
       this.scene.add(this.selfTargets[seat]);
     });
-
-    this.postProcessor = new RetroBayerPostProcessor(1920, 1080);
 
     try {
       const gl = (this.canvas.getContext("webgl2", { antialias: true }) ||
@@ -1795,19 +1791,11 @@ export class BuckshotOctagon3DEngine {
 
   public resize(): void {
     if (this.disposed || !this.renderer) return;
-    const parent = this.canvas.parentElement;
-    if (!parent) return;
-    const w = Math.max(1, parent.clientWidth);
-    const h = Math.max(1, parent.clientHeight);
-    this.cssWidth = w;
-    this.cssHeight = h;
+    const w = Math.max(1, this.container.clientWidth || window.innerWidth);
+    const h = Math.max(1, this.container.clientHeight || window.innerHeight);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
-
-    const rtW = Math.max(1, Math.floor(w * dpr));
-    const rtH = Math.max(1, Math.floor(h * dpr));
-    this.postProcessor.setSize(rtW, rtH);
   }
 
   private animate = (): void => {
@@ -2035,21 +2023,21 @@ export class BuckshotOctagon3DEngine {
 
   private renderViewports(): void {
     if (!this.renderer) return;
-    const w = this.postProcessor.renderTarget.width;
-    const h = this.postProcessor.renderTarget.height;
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
     if (w <= 0 || h <= 0) return;
 
     if (this.flashFramesRemaining > 0) {
-      this.postProcessor.setFlash(0.85);
+      this.renderer.toneMappingExposure = 2.85;
       this.flashFramesRemaining -= 1;
     } else {
-      this.postProcessor.setFlash(0.0);
+      this.renderer.toneMappingExposure = 0.94;
     }
-
-    this.renderer.setRenderTarget(this.postProcessor.renderTarget);
 
     if (this.currentState.viewMode === "active_fullscreen") {
       this.renderer.setScissorTest(false);
+      this.renderer.autoClear = false;
+      this.renderer.clear();
       this.renderer.setViewport(0, 0, w, h);
       this.activeFullCam.aspect = w / h;
       this.activeFullCam.updateProjectionMatrix();
@@ -2057,6 +2045,8 @@ export class BuckshotOctagon3DEngine {
     } else {
       // 2x2 Dörtlü Bölünmüş Ekran (Quad Split-Screen)
       this.renderer.setScissorTest(true);
+      this.renderer.autoClear = false;
+      this.renderer.clear();
       const halfW = Math.floor(w / 2);
       const halfH = Math.floor(h / 2);
       const aspect = halfW / Math.max(1, halfH);
@@ -2090,11 +2080,6 @@ export class BuckshotOctagon3DEngine {
         }
       });
     }
-
-    this.renderer.setScissorTest(false);
-    this.renderer.setRenderTarget(null);
-    this.renderer.setViewport(0, 0, this.cssWidth, this.cssHeight);
-    this.postProcessor.renderToScreen(this.renderer);
   }
 
   public dispose(): void {
@@ -2104,8 +2089,6 @@ export class BuckshotOctagon3DEngine {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
     }
-
-    this.postProcessor?.dispose();
 
     this.scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
